@@ -1,12 +1,14 @@
 package com.hello.spring.jdbc;
 
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
 import javax.sql.DataSource;
 
 import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.ResultSetExtractor;
 import org.springframework.jdbc.core.SqlProvider;
 import org.springframework.jdbc.core.StatementCallback;
 import org.springframework.jdbc.datasource.DataSourceUtils;
@@ -28,7 +30,7 @@ public class TracingWrappedJdbcTemplate extends org.springframework.jdbc.core.Jd
 	 * Construct a new JdbcTemplate for bean usage.
 	 * <p>
 	 * Note: The DataSource has to be set before using the instance.
-	 * 
+	 *
 	 * @see #setDataSource
 	 */
 	public TracingWrappedJdbcTemplate() {
@@ -38,7 +40,7 @@ public class TracingWrappedJdbcTemplate extends org.springframework.jdbc.core.Jd
 	 * Construct a new JdbcTemplate, given a DataSource to obtain connections from.
 	 * <p>
 	 * Note: This will not trigger initialization of the exception translator.
-	 * 
+	 *
 	 * @param dataSource the JDBC DataSource to obtain connections from
 	 */
 	public TracingWrappedJdbcTemplate(DataSource dataSource) {
@@ -101,5 +103,39 @@ public class TracingWrappedJdbcTemplate extends org.springframework.jdbc.core.Jd
 		} else {
 			return null;
 		}
+	}
+
+	@Override
+	@Nullable
+	public <T> T query(final String sql, final ResultSetExtractor<T> rse) throws DataAccessException {
+		Assert.notNull(sql, "SQL must not be null");
+		Assert.notNull(rse, "ResultSetExtractor must not be null");
+		if (logger.isDebugEnabled()) {
+			logger.debug("Executing SQL query [" + sql + "]");
+		}
+
+		String traceSQL = String.format("-- %s \n %s", tracer.getCurrentSpan().getContext().getTraceId().toString(),
+				sql);
+
+		class QueryStatementCallback implements StatementCallback<T>, SqlProvider {
+			@Override
+			@Nullable
+			public T doInStatement(Statement stmt) throws SQLException {
+				ResultSet rs = null;
+				try {
+					rs = stmt.executeQuery(traceSQL);
+					return rse.extractData(rs);
+				} finally {
+					JdbcUtils.closeResultSet(rs);
+				}
+			}
+
+			@Override
+			public String getSql() {
+				return sql;
+			}
+		}
+
+		return execute(new QueryStatementCallback());
 	}
 }

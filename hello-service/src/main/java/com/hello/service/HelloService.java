@@ -28,18 +28,18 @@ public class HelloService {
 	@Cacheable("hello_cache")
 	public String printHello() {
 		Span span = SpanUtils.buildSpan(tracer, "HelloService printHello").startSpan();
-		String helloStr = "Hello from Service";
+		String helloStr = "Hello from ";
 		LOG.info("Printing hello");
 
 		String name = template.queryForObject("Select name from helloworld", String.class);
 		span.addAnnotation(name);
-
+		helloStr += name;
 		span.end();
 		return helloStr;
 	}
 
 	@CacheEvict(value = "hello_cache", allEntries = true)
 	public void evictCache() {
-		log.info("cahce evicted");
+		log.info("cache evicted");
 	}
 }

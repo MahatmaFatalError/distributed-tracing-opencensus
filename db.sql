@@ -10,3 +10,8 @@ CREATE TABLE public.helloworld (
 INSERT INTO public.helloworld
 ("name")
 VALUES('Julian');
+
+LOAD 'auto_explain';
+SET auto_explain.log_min_duration = 0;
+SET auto_explain.log_analyze = true;
+SET auto_explain.log_format = json;
