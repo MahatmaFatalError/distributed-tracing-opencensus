@@ -3,32 +3,36 @@
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
-
-	<groupId>com.mcanuto</groupId>
-	<artifactId>greetings-service</artifactId>
-	<version>1.0-SNAPSHOT</version>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>2.1.6.RELEASE</version>
+		<relativePath /> <!-- lookup parent from repository -->
+	</parent>
+	<groupId>cloud.jindujun</groupId>
+	<artifactId>postgres-log-to-opencensus-converter</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>postgres-log-to-opencensus-converter</name>
+	<description>Demo project for Spring Boot</description>
 
 	<properties>
+		<java.version>1.8</java.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<maven.compiler.source>1.8</maven.compiler.source>
 		<maven.compiler.target>1.8</maven.compiler.target>
-		<spring-boot.version>2.0.3.RELEASE</spring-boot.version>
 		<io-opencensus.version>0.23.0</io-opencensus.version>
 		<junit.version>4.12</junit.version>
+
 	</properties>
 
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-web</artifactId>
-			<version>${spring-boot.version}</version>
+			<artifactId>spring-boot-starter-jdbc</artifactId>
 		</dependency>
-
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-test</artifactId>
-			<version>${spring-boot.version}</version>
-			<scope>test</scope>
+			<artifactId>spring-boot-starter-quartz</artifactId>
 		</dependency>
 
 		<dependency>
@@ -43,51 +47,54 @@
 		</dependency>
 		<dependency>
 			<groupId>io.opencensus</groupId>
+			<artifactId>opencensus-impl-core</artifactId>
+			<version>0.23.1</version>
+		</dependency>
+		<dependency>
+			<groupId>io.opencensus</groupId>
 			<artifactId>opencensus-impl</artifactId>
 			<version>${io-opencensus.version}</version>
+<!-- 			<scope>runtime</scope> -->
+			<exclusions>
+				<exclusion>
+					<groupId>io.opencensus</groupId>
+					<artifactId>opencensus-impl-core</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+
+
+
+		<dependency>
+			<groupId>com.google.code.gson</groupId>
+			<artifactId>gson</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.jooq</groupId>
+			<artifactId>joor-java-8</artifactId>
+			<version>0.9.11</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
 			<scope>runtime</scope>
 		</dependency>
-
 		<dependency>
-			<groupId>com.google.guava</groupId>
-			<artifactId>guava</artifactId>
-			<version>27.1-jre</version>
-		</dependency>
-
-		<dependency>
-			<groupId>junit</groupId>
-			<artifactId>junit</artifactId>
-			<version>${junit.version}</version>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
 
 	<build>
-		<finalName>${project.artifactId}</finalName>
-
 		<plugins>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
-				<executions>
-					<execution>
-						<goals>
-							<goal>repackage</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
-
-			<!-- Build Docker image -->
-			<plugin>
-				<groupId>com.spotify</groupId>
-				<artifactId>dockerfile-maven-plugin</artifactId>
-				<version>1.4.0</version>
-				<configuration>
-					<repository>${project.artifactId}</repository>
-					<tag>${project.version}</tag>
-				</configuration>
 			</plugin>
 		</plugins>
 	</build>
+
 </project>

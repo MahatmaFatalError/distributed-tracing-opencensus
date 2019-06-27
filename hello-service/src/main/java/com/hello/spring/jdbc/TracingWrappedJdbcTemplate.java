@@ -18,6 +18,7 @@ import org.springframework.util.Assert;
 
 import io.opencensus.common.Scope;
 import io.opencensus.trace.Span;
+import io.opencensus.trace.SpanContext;
 import io.opencensus.trace.Tracer;
 import io.opencensus.trace.Tracing;
 import io.opencensus.trace.samplers.Samplers;
@@ -114,8 +115,8 @@ public class TracingWrappedJdbcTemplate extends org.springframework.jdbc.core.Jd
 			logger.debug("Executing SQL query [" + sql + "]");
 		}
 
-		String traceSQL = String.format("-- %s \n %s", tracer.getCurrentSpan().getContext().getTraceId().toString(),
-				sql);
+		SpanContext context = tracer.getCurrentSpan().getContext();
+		String traceSQL = String.format("-- %s \n %s", context.toString(), sql);
 
 		class QueryStatementCallback implements StatementCallback<T>, SqlProvider {
 			@Override
