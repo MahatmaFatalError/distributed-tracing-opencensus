@@ -22,7 +22,7 @@
 		<maven.compiler.target>1.8</maven.compiler.target>
 		<io-opencensus.version>0.23.0</io-opencensus.version>
 		<junit.version>4.12</junit.version>
-		 <quartz.version>2.3.0</quartz.version>
+		<quartz.version>2.3.0</quartz.version>
 
 	</properties>
 

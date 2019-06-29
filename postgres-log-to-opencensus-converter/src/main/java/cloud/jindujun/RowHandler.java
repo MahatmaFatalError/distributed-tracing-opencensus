@@ -28,7 +28,6 @@ import io.opencensus.trace.samplers.Samplers;
 
 public class RowHandler {
 
-	private static long miliInNano = 1000000l;
 
 	private class TimestampTuple {
 		private ZonedDateTime startTs;
@@ -81,7 +80,7 @@ public class RowHandler {
 		String message = (String) row.get("message");
 		java.sql.Timestamp sqlTimestamp = (java.sql.Timestamp) row.get("log_time");
 		Integer pid = (Integer) row.get("process_id");
-		LOG.info("Timestamp: " + sqlTimestamp.toString() + " Message: " + message);
+		//LOG.info("Timestamp: " + sqlTimestamp.toString() + " Message: " + message);
 
 		ZonedDateTime timestamp = ZonedDateTime.ofInstant(sqlTimestamp.toInstant(), ZoneId.systemDefault());
 		convert(message, timestamp, pid);
@@ -91,10 +90,10 @@ public class RowHandler {
 		SpanBuilder spanBuilder = null;
 		SpanContext spanContext = null;
 
-		if (message != null && message.contains("-- SpanContext{traceId=TraceId{traceId=")) {
-
+		if (message != null && message.contains("-- SpanContext{traceId=TraceId{traceId=") && !message.contains("plan:")) {
 			try {
 				spanContext = traceContextLoader.loadSpanContext(message);
+				LOG.info("Span context created!		Timestamp: " + timestamp + " Message: " + message);
 			} catch (SpanContextParseException e) {
 				// spanBuilder =
 				// tracer.spanBuilder(spanName).setRecordEvents(true).setSampler(Samplers.alwaysSample());
@@ -103,7 +102,7 @@ public class RowHandler {
 
 			Map<String, TimestampTuple> relationTsTupleMap = gatheredTimeSpans.get(pid);
 			if (relationTsTupleMap != null) {
-
+				
 				spanBuilder = tracer.spanBuilderWithRemoteParent("wait for lock", spanContext).setRecordEvents(true)
 						.setSampler(Samplers.alwaysSample());
 
@@ -130,12 +129,12 @@ public class RowHandler {
 
 				long endNanos = toNanos(endTs);
 
-				LOG.info("startTs:	" + startTs.toString());
-				LOG.info("endTs: 	" + endTs.toString());
-				LOG.info("startTsConverted: " + startTsConverted.toString());
-				LOG.info("endTsConverted: 	" + endTsConverted.toString());
-				LOG.info("startNanos:	" + startNanos);
-				LOG.info("endNanos: 	" + endNanos);
+//				LOG.info("startTs:	" + startTs.toString());
+//				LOG.info("endTs: 	" + endTs.toString());
+//				LOG.info("startTsConverted: " + startTsConverted.toString());
+//				LOG.info("endTsConverted: 	" + endTsConverted.toString());
+//				LOG.info("startNanos:	" + startNanos);
+//				LOG.info("endNanos: 	" + endNanos);
 
 				span.setStartTime(startNanos);
 
@@ -150,17 +149,16 @@ public class RowHandler {
 		}
 
 		if (message != null && message.contains("plan:")) {
-			LOG.info(message);
 			String json = message.substring(message.indexOf('\n') + 1);
 			JsonObject jsonObject = new JsonParser().parse(json).getAsJsonObject();
-			LOG.info(jsonObject.toString());
+			LOG.info("Execution Plan found: " + jsonObject.toString());
 		}
 
 		if (message != null && message.contains("still waiting for")) {
 
 			Map<String, TimestampTuple> value = new HashMap<>();
 			TimestampTuple tsTuple = new TimestampTuple().setStartTs(timestamp);
-			value.put("TODO_RELATION", tsTuple);
+			value.put("TODO_RELATION", tsTuple); //Eigenen Lock Context speichern
 
 			gatheredTimeSpans.put(pid, value);
 
