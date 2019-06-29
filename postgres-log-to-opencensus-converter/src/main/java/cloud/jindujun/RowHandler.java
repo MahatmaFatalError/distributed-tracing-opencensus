@@ -6,6 +6,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -116,18 +117,33 @@ public class RowHandler {
 
 				TimestampTuple timestampTuple = relationTsTupleMap.get("TODO_RELATION");
 
-				Timestamp startTsConverted = Timestamp.create(timestampTuple.getStartTs().toInstant().getEpochSecond(),
-						timestampTuple.getStartTs().toInstant().getNano());
-				Timestamp endTsConverted = Timestamp.create(timestampTuple.getEndTs().toInstant().getEpochSecond(),
-						timestampTuple.getEndTs().toInstant().getNano());
+				ZonedDateTime startTs = timestampTuple.getStartTs();
+				long startNanos = toNanos(startTs);
 
-				span.setStartTime(startTsConverted);
+				Timestamp startTsConverted = Timestamp.create(startTs.toInstant().getEpochSecond(),
+						startTs.toInstant().getNano());
+
+				ZonedDateTime endTs = timestampTuple.getEndTs();
+
+				Timestamp endTsConverted = Timestamp.create(endTs.toInstant().getEpochSecond(),
+						endTs.toInstant().getNano());
+
+				long endNanos = toNanos(endTs);
+
+				LOG.info("startTs:	" + startTs.toString());
+				LOG.info("endTs: 	" + endTs.toString());
+				LOG.info("startTsConverted: " + startTsConverted.toString());
+				LOG.info("endTsConverted: 	" + endTsConverted.toString());
+				LOG.info("startNanos:	" + startNanos);
+				LOG.info("endNanos: 	" + endNanos);
+
+				span.setStartTime(startNanos);
 
 				try (Scope ws = tracer.withSpan(span)) {
 					span.addAnnotation(message);
 					gatheredTimeSpans.remove(pid);
 				} finally {
-					span.end(EndSpanOptions.DEFAULT, endTsConverted);
+					span.end(EndSpanOptions.DEFAULT, endNanos);
 				}
 			}
 
@@ -158,6 +174,11 @@ public class RowHandler {
 			relationTsTupleMap.put("TODO_RELATION", timestampTuple);
 
 		}
+	}
+
+	private long toNanos(ZonedDateTime endTs) {
+		return TimeUnit.SECONDS.toNanos(endTs.toInstant().getEpochSecond())
+				+ endTs.toInstant().getNano();
 	}
 
 }

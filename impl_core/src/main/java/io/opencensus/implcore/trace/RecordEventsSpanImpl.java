@@ -384,6 +384,12 @@ public final class RecordEventsSpanImpl extends Span implements Element<RecordEv
       this.startNanoTime = this.timestampConverter.convertTimestamp(startTimestamp);
     }
   }
+  
+	public void setStartTime(long startNanoTime) {
+		synchronized (this) {
+			this.startNanoTime = (startNanoTime);
+		}
+	}
 
   @Override
   public void end(EndSpanOptions options) {
@@ -395,7 +401,7 @@ public final class RecordEventsSpanImpl extends Span implements Element<RecordEv
     end(options, this.timestampConverter.convertTimestamp(endTimestamp));
   }
 
-  private void end(EndSpanOptions options, long endNanoTime) {
+  public void end(EndSpanOptions options, long endNanoTime) {
     Preconditions.checkNotNull(options, "options");
     synchronized (this) {
       if (hasBeenEnded) {
