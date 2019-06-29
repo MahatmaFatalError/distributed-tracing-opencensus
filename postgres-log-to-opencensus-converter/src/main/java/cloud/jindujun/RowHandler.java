@@ -80,7 +80,7 @@ public class RowHandler {
 		String message = (String) row.get("message");
 		java.sql.Timestamp sqlTimestamp = (java.sql.Timestamp) row.get("log_time");
 		Integer pid = (Integer) row.get("process_id");
-		LOG.info(message);
+		LOG.info("Timestamp: " + sqlTimestamp.toString() + " Message: " + message);
 
 		ZonedDateTime timestamp = ZonedDateTime.ofInstant(sqlTimestamp.toInstant(), ZoneId.systemDefault());
 		convert(message, timestamp, pid);

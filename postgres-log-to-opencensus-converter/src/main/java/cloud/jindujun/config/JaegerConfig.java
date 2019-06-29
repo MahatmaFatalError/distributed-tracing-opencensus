@@ -9,6 +9,6 @@ import io.opencensus.exporter.trace.jaeger.JaegerTraceExporter;
 public class JaegerConfig {
 
 	public JaegerConfig(@Value("${tracing.jaegerUrl}") String jaegerThriftEndpoint) {
-		JaegerTraceExporter.createAndRegister(jaegerThriftEndpoint, "log-converter");
+		JaegerTraceExporter.createAndRegister(jaegerThriftEndpoint, "PostgreSQL-log-converter");
 	}
 }

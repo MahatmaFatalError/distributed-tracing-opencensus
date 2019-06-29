@@ -22,6 +22,7 @@
 		<maven.compiler.target>1.8</maven.compiler.target>
 		<io-opencensus.version>0.23.0</io-opencensus.version>
 		<junit.version>4.12</junit.version>
+		 <quartz.version>2.3.0</quartz.version>
 
 	</properties>
 
@@ -61,6 +62,17 @@
 					<artifactId>opencensus-impl-core</artifactId>
 				</exclusion>
 			</exclusions>
+		</dependency>
+		
+		<!-- spring's support for quartz -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context-support</artifactId>
+        </dependency>
+        <!-- quartz -->
+        <dependency>
+            <groupId>org.quartz-scheduler</groupId>
+            <artifactId>quartz</artifactId>
 		</dependency>
 
 
