@@ -29,6 +29,7 @@ import cloud.jindujun.config.AutoWiringSpringBeanJobFactory;
 @Configuration
 public class SpringQrtzScheduler {
 	Logger logger = LoggerFactory.getLogger(getClass());
+	private final int frequencyInSec = 60;
 
 	@Autowired
 	private ApplicationContext applicationContext;
@@ -38,30 +39,30 @@ public class SpringQrtzScheduler {
 		logger.info("Hello world from Quartz...");
 	}
 
-	@Bean
-	public SpringBeanJobFactory springBeanJobFactory() {
-		AutoWiringSpringBeanJobFactory jobFactory = new AutoWiringSpringBeanJobFactory();
-		logger.debug("Configuring Job factory");
-
-		jobFactory.setApplicationContext(applicationContext);
-		return jobFactory;
-	}
-
-	@Bean
-	public Scheduler scheduler(Trigger trigger, JobDetail job) throws SchedulerException, IOException {
-
-		StdSchedulerFactory factory = new StdSchedulerFactory();
-		factory.initialize(new ClassPathResource("quartz.properties").getInputStream());
-
-		logger.debug("Getting a handle to the Scheduler");
-		Scheduler scheduler = factory.getScheduler();
-		scheduler.setJobFactory(springBeanJobFactory());
-		scheduler.scheduleJob(job, trigger);
-
-		logger.info("Starting Scheduler threads");
-		scheduler.start();
-		return scheduler;
-	}
+//	@Bean
+//	public SpringBeanJobFactory springBeanJobFactory() {
+//		AutoWiringSpringBeanJobFactory jobFactory = new AutoWiringSpringBeanJobFactory();
+//		logger.debug("Configuring Job factory");
+//
+//		jobFactory.setApplicationContext(applicationContext);
+//		return jobFactory;
+//	}
+//
+//	@Bean
+//	public Scheduler scheduler(Trigger trigger, JobDetail job) throws SchedulerException, IOException {
+//
+//		StdSchedulerFactory factory = new StdSchedulerFactory();
+//		factory.initialize(new ClassPathResource("quartz.properties").getInputStream());	
+//		
+//		logger.debug("Getting a handle to the Scheduler");
+//		Scheduler scheduler = factory.getScheduler();
+//		scheduler.setJobFactory(springBeanJobFactory());
+//		scheduler.scheduleJob(job, trigger);
+//		scheduler.startDelayed(frequencyInSec);
+//		logger.info("Starting Scheduler threads");
+//		scheduler.start();
+//		return scheduler;
+//	}
 
 	@Bean
 	public JobDetail jobDetail() {
@@ -72,8 +73,7 @@ public class SpringQrtzScheduler {
 
 	@Bean
 	public Trigger trigger(JobDetail job) {
-
-		int frequencyInSec = 60;
+		
 		logger.info("Configuring trigger to fire every {} seconds", frequencyInSec);
 
 		return newTrigger().forJob(job).withIdentity(TriggerKey.triggerKey("Qrtz_Trigger"))

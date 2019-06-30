@@ -27,6 +27,8 @@ import io.opencensus.trace.propagation.SpanContextParseException;
 import io.opencensus.trace.samplers.Samplers;
 
 public class RowHandler {
+	
+	private int LOCK_OFFSET_SEC = 1;
 
 
 	private class TimestampTuple {
@@ -80,7 +82,7 @@ public class RowHandler {
 		String message = (String) row.get("message");
 		java.sql.Timestamp sqlTimestamp = (java.sql.Timestamp) row.get("log_time");
 		Integer pid = (Integer) row.get("process_id");
-		//LOG.info("Timestamp: " + sqlTimestamp.toString() + " Message: " + message);
+		LOG.info("Timestamp: " + sqlTimestamp.toString() + " Message: " + message);
 
 		ZonedDateTime timestamp = ZonedDateTime.ofInstant(sqlTimestamp.toInstant(), ZoneId.systemDefault());
 		convert(message, timestamp, pid);
@@ -90,10 +92,11 @@ public class RowHandler {
 		SpanBuilder spanBuilder = null;
 		SpanContext spanContext = null;
 
-		if (message != null && message.contains("-- SpanContext{traceId=TraceId{traceId=") && !message.contains("plan:")) {
+		if (message != null && message.contains("-- SpanContext{traceId=TraceId{traceId=") && !message.contains("plan:") && !message.contains("still waiting for") && !message.contains(" acquired ")) {
+			LOG.info("Timestamp: " + timestamp + " Message: " + message);
 			try {
 				spanContext = traceContextLoader.loadSpanContext(message);
-				LOG.info("Span context created!		Timestamp: " + timestamp + " Message: " + message);
+				//LOG.info("Span context created!		Timestamp: " + timestamp + " Message: " + message);
 			} catch (SpanContextParseException e) {
 				// spanBuilder =
 				// tracer.spanBuilder(spanName).setRecordEvents(true).setSampler(Samplers.alwaysSample());
@@ -117,7 +120,7 @@ public class RowHandler {
 				TimestampTuple timestampTuple = relationTsTupleMap.get("TODO_RELATION");
 
 				ZonedDateTime startTs = timestampTuple.getStartTs();
-				long startNanos = toNanos(startTs);
+				long startNanos = toNanos(startTs) - TimeUnit.SECONDS.toNanos(LOCK_OFFSET_SEC);
 
 				Timestamp startTsConverted = Timestamp.create(startTs.toInstant().getEpochSecond(),
 						startTs.toInstant().getNano());
@@ -137,6 +140,7 @@ public class RowHandler {
 //				LOG.info("endNanos: 	" + endNanos);
 
 				span.setStartTime(startNanos);
+				LOG.info("Span started with trace Id:" + span.getContext().getTraceId());
 
 				try (Scope ws = tracer.withSpan(span)) {
 					span.addAnnotation(message);
@@ -149,13 +153,14 @@ public class RowHandler {
 		}
 
 		if (message != null && message.contains("plan:")) {
+			LOG.info("Timestamp: " + timestamp + " Message: " + message);
 			String json = message.substring(message.indexOf('\n') + 1);
 			JsonObject jsonObject = new JsonParser().parse(json).getAsJsonObject();
 			LOG.info("Execution Plan found: " + jsonObject.toString());
 		}
 
 		if (message != null && message.contains("still waiting for")) {
-
+			LOG.info("Timestamp: " + timestamp + " Message: " + message);
 			Map<String, TimestampTuple> value = new HashMap<>();
 			TimestampTuple tsTuple = new TimestampTuple().setStartTs(timestamp);
 			value.put("TODO_RELATION", tsTuple); //Eigenen Lock Context speichern
@@ -165,7 +170,7 @@ public class RowHandler {
 			waitingPids.put(pid, timestamp);
 
 		} else if (message != null && message.contains(" acquired ") && waitingPids.containsKey(pid)) {
-
+			LOG.info("Timestamp: " + timestamp + " Message: " + message);
 			Map<String, TimestampTuple> relationTsTupleMap = gatheredTimeSpans.get(pid);
 			TimestampTuple timestampTuple = relationTsTupleMap.get("TODO_RELATION");
 			timestampTuple.setEndTs(timestamp);

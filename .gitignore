@@ -41,3 +41,4 @@ bin
 
 # Other
 TAGS
+*.log

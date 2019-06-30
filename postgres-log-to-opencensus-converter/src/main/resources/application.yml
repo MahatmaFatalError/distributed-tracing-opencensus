@@ -9,3 +9,26 @@ spring:
     username: postgres
     password: postgres
 
+
+  quartz:
+    auto-startup: true
+    properties:
+      org.quartz.threadPool.threadCount: 1
+      
+    
+    
+    
+## thread-pool
+#org.quartz.threadPool.class=org.quartz.simpl.SimpleThreadPool
+#org.quartz.threadPool.threadCount=1
+##true
+#org.quartz.threadPool.threadsInheritContextClassLoaderOfInitializingThread=false
+#
+## job-store
+#org.quartz.jobStore.class = org.quartz.simpl.RAMJobStore
+#
+## others 
+#org.quartz.jobStore.misfireThreshold = 60000   
+## (in milliseconds), (a minute)
+## It defines how late the trigger should be to be considered misfired. If the trigger is discovered 61 seconds after the scheduled time - the special misfire handler thread takes care of it, obeying the misfire instruction. 
+

@@ -12,7 +12,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  *
  */
 @SpringBootApplication
-@EnableScheduling
+//@EnableScheduling
 public class PostgresLogToOpencensusConverterApplication implements CommandLineRunner {
 
 	private static Logger LOG = LoggerFactory.getLogger(PostgresLogToOpencensusConverterApplication.class);
