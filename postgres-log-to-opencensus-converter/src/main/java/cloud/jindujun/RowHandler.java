@@ -1,5 +1,6 @@
 package cloud.jindujun;
 
+import java.io.IOException;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -14,6 +15,8 @@ import org.slf4j.LoggerFactory;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import cloud.jindujun.executionplan.ExecPlanJsonParser;
+import cloud.jindujun.executionplan.PlanEnvelop;
 import io.opencensus.common.Scope;
 import io.opencensus.common.Timestamp;
 import io.opencensus.implcore.trace.RecordEventsSpanImpl;
@@ -155,6 +158,14 @@ public class RowHandler {
 		if (message != null && message.contains("plan:")) {
 			LOG.info("Timestamp: " + timestamp + " Message: " + message);
 			String json = message.substring(message.indexOf('\n') + 1);
+			
+			try {
+				PlanEnvelop planWrapper = ExecPlanJsonParser.getInstance().parse(json);
+				
+			} catch (IOException e) {
+				LOG.error("Parsing the folloing json failed: " + json, e);
+			}
+			
 			JsonObject jsonObject = new JsonParser().parse(json).getAsJsonObject();
 			LOG.info("Execution Plan found: " + jsonObject.toString());
 		}

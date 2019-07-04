@@ -144,7 +144,6 @@ public class ExecPlan implements Comparable<ExecPlan>{
 	 */
 	@Override
 	public int compareTo(ExecPlan o) {
-		// TODO Auto-generated method stub
 		return this.actualStartupTime.compareTo(o.getActualStartupTime());
 	}
 	

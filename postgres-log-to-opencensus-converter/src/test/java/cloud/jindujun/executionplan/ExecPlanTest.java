@@ -30,7 +30,7 @@ public class ExecPlanTest {
 		File file = ResourceUtils.getFile("classpath:plan.json");
 		String content = new String(Files.readAllBytes(file.toPath()));
 
-		PlanWrapper planWrapper = ExecPlanJsonParser.parse(content);
+		PlanEnvelop planWrapper = ExecPlanJsonParser.getInstance().parse(content);
 
 		System.out.println(planWrapper);
 		

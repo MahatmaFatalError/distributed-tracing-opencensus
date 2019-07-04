@@ -8,11 +8,28 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class ExecPlanJsonParser {
-	
+
+	private static ExecPlanJsonParser instance;
 	private static ObjectMapper objectMapper = new ObjectMapper()
 			.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-	public static PlanWrapper parse(String json) throws JsonParseException, JsonMappingException, IOException {
-		return objectMapper.readValue(json, PlanWrapper.class);
+
+	private ExecPlanJsonParser() {
+
+	}
+
+	/**
+	 * @return Singleton Object
+	 */
+	public static synchronized ExecPlanJsonParser getInstance() {
+		if (ExecPlanJsonParser.instance == null) {
+			ExecPlanJsonParser.instance = new ExecPlanJsonParser();
+		}
+		return ExecPlanJsonParser.instance;
+	}
+
+	
+	public PlanEnvelop parse(String json) throws JsonParseException, JsonMappingException, IOException {
+		return objectMapper.readValue(json, PlanEnvelop.class);
 	}
 }
