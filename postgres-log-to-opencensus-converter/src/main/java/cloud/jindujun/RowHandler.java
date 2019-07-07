@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import cloud.jindujun.executionplan.ExecPlan;
 import cloud.jindujun.executionplan.ExecPlanJsonParser;
 import cloud.jindujun.executionplan.PlanEnvelop;
 import io.opencensus.common.Scope;
@@ -30,9 +31,8 @@ import io.opencensus.trace.propagation.SpanContextParseException;
 import io.opencensus.trace.samplers.Samplers;
 
 public class RowHandler {
-	
-	private int LOCK_OFFSET_SEC = 1;
 
+	private int LOCK_OFFSET_SEC = 1;
 
 	private class TimestampTuple {
 		private ZonedDateTime startTs;
@@ -56,8 +56,6 @@ public class RowHandler {
 			return this;
 		}
 	}
-
-	private DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS z", Locale.ENGLISH);
 
 	// TODO noch die Tabelle berücksichtigen, die geloggt wurde. Innerhalb einer
 	// transaktion können untecschiedliche Tabellen gelockt sein und unterschiedlich
@@ -92,23 +90,21 @@ public class RowHandler {
 	}
 
 	public void convert(String message, ZonedDateTime timestamp, Integer pid) {
-		SpanBuilder spanBuilder = null;
-		SpanContext spanContext = null;
 
-		if (message != null && message.contains("-- SpanContext{traceId=TraceId{traceId=") && !message.contains("plan:") && !message.contains("still waiting for") && !message.contains(" acquired ")) {
+		if (message != null && message.contains("-- SpanContext{traceId=TraceId{traceId=") && !message.contains("plan:")
+				&& !message.contains("still waiting for") && !message.contains(" acquired ")) {
+			SpanBuilder spanBuilder = null;
+			SpanContext spanContext = null;
 			LOG.info("Timestamp: " + timestamp + " Message: " + message);
 			try {
 				spanContext = traceContextLoader.loadSpanContext(message);
-				//LOG.info("Span context created!		Timestamp: " + timestamp + " Message: " + message);
 			} catch (SpanContextParseException e) {
-				// spanBuilder =
-				// tracer.spanBuilder(spanName).setRecordEvents(true).setSampler(Samplers.alwaysSample());
 				LOG.warn("Parent Span is not present");
 			}
 
 			Map<String, TimestampTuple> relationTsTupleMap = gatheredTimeSpans.get(pid);
 			if (relationTsTupleMap != null) {
-				
+
 				spanBuilder = tracer.spanBuilderWithRemoteParent("wait for lock", spanContext).setRecordEvents(true)
 						.setSampler(Samplers.alwaysSample());
 
@@ -135,13 +131,6 @@ public class RowHandler {
 
 				long endNanos = toNanos(endTs);
 
-//				LOG.info("startTs:	" + startTs.toString());
-//				LOG.info("endTs: 	" + endTs.toString());
-//				LOG.info("startTsConverted: " + startTsConverted.toString());
-//				LOG.info("endTsConverted: 	" + endTsConverted.toString());
-//				LOG.info("startNanos:	" + startNanos);
-//				LOG.info("endNanos: 	" + endNanos);
-
 				span.setStartTime(startNanos);
 				LOG.info("Span started with trace Id:" + span.getContext().getTraceId());
 
@@ -152,29 +141,40 @@ public class RowHandler {
 					span.end(EndSpanOptions.DEFAULT, endNanos);
 				}
 			}
-
 		}
 
 		if (message != null && message.contains("plan:")) {
 			LOG.info("Timestamp: " + timestamp + " Message: " + message);
 			String json = message.substring(message.indexOf('\n') + 1);
-			
+
 			try {
+				LOG.info("Execution Plan found: " + json);
 				PlanEnvelop planWrapper = ExecPlanJsonParser.getInstance().parse(json);
-				
+
+				SpanBuilder spanBuilder = null;
+				SpanContext spanContext = null;
+
+				try {
+					spanContext = traceContextLoader.loadSpanContext(message);
+				} catch (SpanContextParseException e) {
+					LOG.warn("Parent Span is not present");
+				}
+
+				spanBuilder = tracer.spanBuilderWithRemoteParent("exec plan", spanContext).setRecordEvents(true)
+						.setSampler(Samplers.alwaysSample());
+
+				collectSpans(planWrapper.getPlan(), spanBuilder, timestamp);
 			} catch (IOException e) {
-				LOG.error("Parsing the folloing json failed: " + json, e);
+				LOG.error("Parsing the json failed ", e);
 			}
-			
-			JsonObject jsonObject = new JsonParser().parse(json).getAsJsonObject();
-			LOG.info("Execution Plan found: " + jsonObject.toString());
+
 		}
 
 		if (message != null && message.contains("still waiting for")) {
 			LOG.info("Timestamp: " + timestamp + " Message: " + message);
 			Map<String, TimestampTuple> value = new HashMap<>();
 			TimestampTuple tsTuple = new TimestampTuple().setStartTs(timestamp);
-			value.put("TODO_RELATION", tsTuple); //Eigenen Lock Context speichern
+			value.put("TODO_RELATION", tsTuple); // Eigenen Lock Context speichern
 
 			gatheredTimeSpans.put(pid, value);
 
@@ -190,9 +190,32 @@ public class RowHandler {
 		}
 	}
 
+	private void collectSpans(ExecPlan plan, SpanBuilder spanBuilder, ZonedDateTime timestamp) {
+		RecordEventsSpanImpl span = (RecordEventsSpanImpl) spanBuilder.startSpan();
+
+		ZonedDateTime startTimestamp = plan.getStart(timestamp);
+		ZonedDateTime endTimestamp = plan.getEnd(timestamp);
+
+		LOG.info("startTimestamp	: " + startTimestamp + " of node " + plan.getNodeType());
+		LOG.info("endTimestamp	: " + endTimestamp + " of node " + plan.getNodeType());
+
+		span.setStartTime(toNanos(startTimestamp));
+
+		try (Scope ws = tracer.withSpan(span)) {
+			span.addAnnotation(plan.getNodeType());
+			LOG.info(
+					"Span started with trace Id:" + span.getContext().getTraceId() + " and node " + plan.getNodeType());
+			for (ExecPlan subPlan : plan.getPlans()) {
+				collectSpans(subPlan, spanBuilder, timestamp);
+			}
+		} finally {
+			span.end(EndSpanOptions.DEFAULT, toNanos(endTimestamp));
+		}
+
+	}
+
 	private long toNanos(ZonedDateTime endTs) {
-		return TimeUnit.SECONDS.toNanos(endTs.toInstant().getEpochSecond())
-				+ endTs.toInstant().getNano();
+		return TimeUnit.SECONDS.toNanos(endTs.toInstant().getEpochSecond()) + endTs.toInstant().getNano();
 	}
 
 }

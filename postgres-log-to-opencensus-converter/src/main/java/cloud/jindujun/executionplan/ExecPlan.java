@@ -147,11 +147,26 @@ public class ExecPlan implements Comparable<ExecPlan>{
 		return this.actualStartupTime.compareTo(o.getActualStartupTime());
 	}
 	
+	/**
+	 * 
+	 * @param logTimestamp timestamp of log message (used as offset)
+	 * @return
+	 */
 	public ZonedDateTime getStart(ZonedDateTime logTimestamp) {		
-		return logTimestamp.plusNanos(TimeUnit.MICROSECONDS.toNanos(actualStartupTime.longValue()));
+		return logTimestamp.plusNanos(TimeUnit.MICROSECONDS.toNanos(getStartMicroSecs()));
+	}
+	
+	private long getStartMicroSecs() {
+		Double d = new Double(1000*actualStartupTime);
+		return d.longValue();
+	}
+	
+	private long getEndMicroSecs() {
+		Double d = new Double(1000*actualTotalTime);
+		return d.longValue();
 	}
 	
 	public ZonedDateTime getEnd(ZonedDateTime logTimestamp) {
-		return logTimestamp.plusNanos(TimeUnit.MICROSECONDS.toNanos(actualTotalTime.longValue()));
+		return logTimestamp.plusNanos(TimeUnit.MICROSECONDS.toNanos(getEndMicroSecs()));
 	}
 }
