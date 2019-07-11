@@ -1,6 +1,7 @@
 package com.hello.spring.jdbc;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -8,6 +9,9 @@ import java.sql.Statement;
 import javax.sql.DataSource;
 
 import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.ParameterDisposer;
+import org.springframework.jdbc.core.PreparedStatementCallback;
+import org.springframework.jdbc.core.PreparedStatementCreator;
 import org.springframework.jdbc.core.ResultSetExtractor;
 import org.springframework.jdbc.core.SqlProvider;
 import org.springframework.jdbc.core.StatementCallback;
@@ -48,6 +52,56 @@ public class TracingWrappedJdbcTemplate extends org.springframework.jdbc.core.Jd
 		super(dataSource);
 	}
 
+	// -------------------------------------------------------------------------
+	// Methods dealing with prepared statements
+	// -------------------------------------------------------------------------
+
+	@Override
+	@Nullable
+	public <T> T execute(PreparedStatementCreator psc, PreparedStatementCallback<T> action) throws DataAccessException {
+
+		Assert.notNull(psc, "PreparedStatementCreator must not be null");
+		Assert.notNull(action, "Callback object must not be null");
+		if (logger.isDebugEnabled()) {
+			String sql = getSql(psc);
+			logger.debug("Executing prepared SQL statement" + (sql != null ? " [" + sql + "]" : ""));
+		}
+
+		Connection con = getTracedConnection();
+
+		Span span2 = tracer.spanBuilder("execute statement").setRecordEvents(true).setSampler(Samplers.alwaysSample())
+				.startSpan();
+
+		PreparedStatement ps = null;
+		try (Scope ws = tracer.withSpan(span2)) {
+			ps = psc.createPreparedStatement(con);
+			applyStatementSettings(ps);
+			span2.addAnnotation("Statement:" + ps.toString());
+			T result = action.doInPreparedStatement(ps);
+			handleWarnings(ps);
+			return result;
+		} catch (SQLException ex) {
+			// Release Connection early, to avoid potential connection pool deadlock
+			// in the case when the exception translator hasn't been initialized yet.
+			if (psc instanceof ParameterDisposer) {
+				((ParameterDisposer) psc).cleanupParameters();
+			}
+			String sql = getSql(psc);
+			JdbcUtils.closeStatement(ps);
+			ps = null;
+			DataSourceUtils.releaseConnection(con, getDataSource());
+			con = null;
+			throw translateException("PreparedStatementCallback", sql, ex);
+		} finally {
+			if (psc instanceof ParameterDisposer) {
+				((ParameterDisposer) psc).cleanupParameters();
+			}
+			JdbcUtils.closeStatement(ps);
+			DataSourceUtils.releaseConnection(con, getDataSource());
+			span2.end();
+		}
+	}
+
 	@Override
 	@Nullable
 	public <T> T execute(StatementCallback<T> action) throws DataAccessException {
@@ -57,12 +111,7 @@ public class TracingWrappedJdbcTemplate extends org.springframework.jdbc.core.Jd
 		Span span = tracer.spanBuilder("acquiring db connection from pool").setRecordEvents(true)
 				.setSampler(Samplers.alwaysSample()).startSpan();
 
-		Connection con;
-		try (Scope ws = tracer.withSpan(span)) {
-			con = DataSourceUtils.getConnection(obtainDataSource());
-		} finally {
-			span.end();
-		}
+		Connection con = getTracedConnection();
 
 		Span span2 = tracer.spanBuilder("execute statement").setRecordEvents(true).setSampler(Samplers.alwaysSample())
 				.startSpan();
@@ -104,6 +153,20 @@ public class TracingWrappedJdbcTemplate extends org.springframework.jdbc.core.Jd
 		} else {
 			return null;
 		}
+	}
+
+	private Connection getTracedConnection() {
+		// init trace context
+		Span span = tracer.spanBuilder("acquiring db connection from pool").setRecordEvents(true)
+				.setSampler(Samplers.alwaysSample()).startSpan();
+
+		Connection con;
+		try (Scope ws = tracer.withSpan(span)) {
+			con = DataSourceUtils.getConnection(obtainDataSource());
+		} finally {
+			span.end();
+		}
+		return con;
 	}
 
 	@Override

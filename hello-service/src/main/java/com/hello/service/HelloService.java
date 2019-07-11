@@ -1,5 +1,8 @@
 package com.hello.service;
 
+import java.util.List;
+import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,7 +34,12 @@ public class HelloService {
 		String helloStr = "Hello from ";
 		LOG.info("Printing hello");
 
-		String name = template.queryForObject("Select name from helloworld", String.class);
+		// useless long running query
+		List<Map<String, Object>> result = template.queryForList(
+				"select d1.name, STRING_AGG(d1.SHORT_DESCRIPTION, ',' order by age(d1.LAST_UPDATED, d1.CREATED)) from DOCUMENT_TEMPLATE d1 inner join DOCUMENT_TEMPLATE d2 on d1.id = d2.id where d1.author = ? OR d1.author = ? group by d1.name having count(*) > ? order by d1.name",
+				"Jimmy", "Jessica" , 1000);
+		
+		String name = (String) result.get(0).get("name");
 		span.addAnnotation(name);
 		helloStr += name;
 		span.end();
