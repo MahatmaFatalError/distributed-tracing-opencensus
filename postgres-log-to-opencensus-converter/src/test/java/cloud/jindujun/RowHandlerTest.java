@@ -21,16 +21,16 @@ public class RowHandlerTest {
 	public void testLock() {
 		rowHandler.convert(
 				"process 86673 still waiting for AccessShareLock on relation 16387 of database 13382 after 1000.432 ms",
-				ZonedDateTime.parse("2019-06-27 15:43:52.746 CEST", formatter), 86673);
+				ZonedDateTime.parse("2019-06-27 15:43:52.746 CEST", formatter), 86673, "");
 
 		rowHandler.convert(
 				"process 86673 acquired AccessShareLock on relation 16387 of database 13382 after 7139.512 ms",
-				ZonedDateTime.parse("2019-06-27 15:43:58.886 CEST", formatter), 86673);
+				ZonedDateTime.parse("2019-06-27 15:43:58.886 CEST", formatter), 86673, "");
 
 		rowHandler.convert(
 				"execute <unnamed>: -- SpanContext{traceId=TraceId{traceId=a656b0bbb75b88f6d3ec915d123692d3}, spanId=SpanId{spanId=eb6c14c5a3161a22}, traceOptions=TraceOptions{sampled=true}}\n"
 						+ " Select name from helloworld",
-				ZonedDateTime.parse("2019-06-27 15:43:58.886 CEST", formatter), 86673);
+				ZonedDateTime.parse("2019-06-27 15:43:58.886 CEST", formatter), 86673, "");
 	}
 
 	@Test // TODO
@@ -40,7 +40,7 @@ public class RowHandlerTest {
 		String content = new String(Files.readAllBytes(file.toPath()));
 
 		//2019-07-11 15:32:26.897 CEST,"postgres","postgres",22911,"127.0.0.1:55888",5d273959.597f,11,"SELECT",2019-07-11 15:27:53 CEST,5/4019,0,LOG,00000,"
-		rowHandler.convert(content, ZonedDateTime.parse("2019-07-11 15:32:26.897 CEST", formatter), 22911);
+		rowHandler.convert(content, ZonedDateTime.parse("2019-07-11 15:32:26.897 CEST", formatter), 22911, "SELECT");
 	}
 
 }
