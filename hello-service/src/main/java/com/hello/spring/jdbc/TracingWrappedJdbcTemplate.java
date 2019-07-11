@@ -12,6 +12,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.ParameterDisposer;
 import org.springframework.jdbc.core.PreparedStatementCallback;
 import org.springframework.jdbc.core.PreparedStatementCreator;
+import org.springframework.jdbc.core.PreparedStatementSetter;
 import org.springframework.jdbc.core.ResultSetExtractor;
 import org.springframework.jdbc.core.SqlProvider;
 import org.springframework.jdbc.core.StatementCallback;
@@ -202,4 +203,39 @@ public class TracingWrappedJdbcTemplate extends org.springframework.jdbc.core.Jd
 
 		return execute(new QueryStatementCallback());
 	}
+
+	@Override
+	@Nullable
+	public <T> T query(String sql, @Nullable PreparedStatementSetter pss, ResultSetExtractor<T> rse)
+			throws DataAccessException {
+		return query(new SimplePreparedStatementCreator(sql), pss, rse);
+	}
+
+	/**
+	 * Simple adapter for PreparedStatementCreator, allowing to use a plain SQL
+	 * statement.
+	 */
+	private static class SimplePreparedStatementCreator implements PreparedStatementCreator, SqlProvider {
+
+		private final String sql;
+
+		public SimplePreparedStatementCreator(String sql) {
+			Assert.notNull(sql, "SQL must not be null");
+			SpanContext context = tracer.getCurrentSpan().getContext();
+			String traceSQL = String.format("-- %s \n %s", context.toString(), sql);
+
+			this.sql = traceSQL;
+		}
+
+		@Override
+		public PreparedStatement createPreparedStatement(Connection con) throws SQLException {
+			return con.prepareStatement(this.sql);
+		}
+
+		@Override
+		public String getSql() {
+			return this.sql;
+		}
+	}
+
 }
