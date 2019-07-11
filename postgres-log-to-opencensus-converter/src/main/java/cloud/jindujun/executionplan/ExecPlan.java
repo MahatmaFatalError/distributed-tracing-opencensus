@@ -1,6 +1,7 @@
 package cloud.jindujun.executionplan;
 
 import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -33,9 +34,15 @@ public class ExecPlan implements Comparable<ExecPlan>{
 	@JsonProperty("Total Cost")
 	private double totalCost;
     
+	/**
+	 * in Millis
+	 */
 	@JsonProperty("Actual Startup Time")
 	private Double actualStartupTime;
 	
+	/**
+	 * in Millis
+	 */
 	@JsonProperty("Actual Total Time")
 	private Double actualTotalTime;
 	
@@ -152,8 +159,9 @@ public class ExecPlan implements Comparable<ExecPlan>{
 	 * @param logTimestamp timestamp of log message (used as offset)
 	 * @return
 	 */
-	public ZonedDateTime getStart(ZonedDateTime logTimestamp) {		
-		return logTimestamp.plusNanos(TimeUnit.MICROSECONDS.toNanos(getStartMicroSecs()));
+	public ZonedDateTime getStart(ZonedDateTime logTimestamp) {	
+		return logTimestamp.plus(getStartMicroSecs(), ChronoUnit.MICROS);
+		//return logTimestamp.plusNanos(TimeUnit.MICROSECONDS.toNanos(getStartMicroSecs()));
 	}
 	
 	private long getStartMicroSecs() {
@@ -167,6 +175,7 @@ public class ExecPlan implements Comparable<ExecPlan>{
 	}
 	
 	public ZonedDateTime getEnd(ZonedDateTime logTimestamp) {
-		return logTimestamp.plusNanos(TimeUnit.MICROSECONDS.toNanos(getEndMicroSecs()));
+		return logTimestamp.plus(getEndMicroSecs(), ChronoUnit.MICROS);
+		//return logTimestamp.plusNanos(TimeUnit.MICROSECONDS.toNanos(getEndMicroSecs()));
 	}
 }

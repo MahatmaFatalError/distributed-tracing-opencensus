@@ -1,6 +1,7 @@
 package cloud.jindujun;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -144,14 +145,16 @@ public class RowHandler {
 		}
 
 		if (message != null && message.contains("plan:")) {
-			LOG.info("Timestamp: " + timestamp + " Message: " + message);
-			String json = message.substring(message.indexOf('\n') + 1);
+			int newLineIndex = message.indexOf('\n');
+			String duration = message.substring(0, newLineIndex);
+
+			LOG.info("Timestamp: " + timestamp + " Duration: " + duration + " Message: " + message);
+			String json = message.substring(newLineIndex + 1);
 
 			try {
 				LOG.info("Execution Plan found: " + json);
 				PlanEnvelop planWrapper = ExecPlanJsonParser.getInstance().parse(json);
 
-				SpanBuilder spanBuilder = null;
 				SpanContext spanContext = null;
 
 				try {
@@ -160,10 +163,8 @@ public class RowHandler {
 					LOG.warn("Parent Span is not present");
 				}
 
-				spanBuilder = tracer.spanBuilderWithRemoteParent("exec plan", spanContext).setRecordEvents(true)
-						.setSampler(Samplers.alwaysSample());
-
-				collectSpans(planWrapper.getPlan(), spanBuilder, timestamp);
+				collectSpans(planWrapper.getPlan(), spanContext, timestamp); // TODO: timestamp von vorherigem,
+																				// initialen log des statements holen
 			} catch (IOException e) {
 				LOG.error("Parsing the json failed ", e);
 			}
@@ -190,7 +191,11 @@ public class RowHandler {
 		}
 	}
 
-	private void collectSpans(ExecPlan plan, SpanBuilder spanBuilder, ZonedDateTime timestamp) {
+	private void collectSpans(ExecPlan plan, SpanContext spanContext, ZonedDateTime timestamp) {
+		SpanBuilder spanBuilder = tracer
+				.spanBuilderWithRemoteParent("exec plan node " + plan.getNodeType(), spanContext).setRecordEvents(true)
+				.setSampler(Samplers.alwaysSample());
+
 		RecordEventsSpanImpl span = (RecordEventsSpanImpl) spanBuilder.startSpan();
 
 		ZonedDateTime startTimestamp = plan.getStart(timestamp);
@@ -199,6 +204,9 @@ public class RowHandler {
 		LOG.info("startTimestamp	: " + startTimestamp + " of node " + plan.getNodeType());
 		LOG.info("endTimestamp	: " + endTimestamp + " of node " + plan.getNodeType());
 
+		Duration duration = Duration.between(startTimestamp, endTimestamp);
+		LOG.info("Duration (in ns)	: " + duration.getNano() + " of node " + plan.getNodeType());
+
 		span.setStartTime(toNanos(startTimestamp));
 
 		try (Scope ws = tracer.withSpan(span)) {
@@ -206,7 +214,7 @@ public class RowHandler {
 			LOG.info(
 					"Span started with trace Id:" + span.getContext().getTraceId() + " and node " + plan.getNodeType());
 			for (ExecPlan subPlan : plan.getPlans()) {
-				collectSpans(subPlan, spanBuilder, timestamp);
+				collectSpans(subPlan, spanContext, timestamp);
 			}
 		} finally {
 			span.end(EndSpanOptions.DEFAULT, toNanos(endTimestamp));

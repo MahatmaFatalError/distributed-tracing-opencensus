@@ -39,7 +39,8 @@ public class RowHandlerTest {
 		File file = ResourceUtils.getFile("classpath:logline.csv");
 		String content = new String(Files.readAllBytes(file.toPath()));
 
-		rowHandler.convert(content, ZonedDateTime.parse("2019-06-26 18:18:12.050 CEST", formatter), 95727);
+		//2019-07-11 15:32:26.897 CEST,"postgres","postgres",22911,"127.0.0.1:55888",5d273959.597f,11,"SELECT",2019-07-11 15:27:53 CEST,5/4019,0,LOG,00000,"
+		rowHandler.convert(content, ZonedDateTime.parse("2019-07-11 15:32:26.897 CEST", formatter), 22911);
 	}
 
 }
