@@ -1,4 +1,4 @@
--- Drop table
+-- Takes 5min
 
 -- DROP TABLE public.DOCUMENT_TEMPLATE;
 
@@ -49,7 +49,3 @@ FROM base b
       FROM dict
 ) AS sub(name,short_description, author,descriptionm,content, last_updated, created);
 
-LOAD 'auto_explain';
-SET auto_explain.log_min_duration = 0;
-SET auto_explain.log_analyze = true;
-SET auto_explain.log_format = json;

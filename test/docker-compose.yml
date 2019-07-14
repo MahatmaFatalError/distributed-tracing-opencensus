@@ -1,0 +1,11 @@
+version: "3"
+services:
+  db:
+    image: "postgres:11.3"
+    container_name: "my_postgres_test"
+    ports:
+      - "5432:5432"
+    volumes:
+      - /usr/local/var/postgres:/var/lib/postgresql/data
+
+      

@@ -18,8 +18,10 @@ services:
       - "8888:8888"
     environment:
       JAEGER_HOST: jaeger
+      PG_HOST: db-postgres
     links:
       - jaeger
+      - db-postgres
 
   greetings-service:
     build: ./greetings-service
@@ -28,9 +30,25 @@ services:
     environment:
       HELLO_SERVICE_HOST: hello-service
       JAEGER_HOST: jaeger
+      PG_HOST: db-postgres
     links:
        - hello-service
        - jaeger
+       - db-postgres
+
+  db-postgres:
+    image: "postgres:11.3"
+    container_name: "db-postgres"
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_dbdata:/usr/local/var/postgres
+      - ./customPostgresql.conf:/etc/postgresql.conf
+    # command: postgres -c config_file=/etc/postgresql.conf
+      
+volumes:
+  pg_dbdata:
+
 
 
 
