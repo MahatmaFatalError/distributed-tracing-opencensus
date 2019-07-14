@@ -43,8 +43,9 @@ services:
       - "5432:5432"
     volumes:
       - pg_dbdata:/usr/local/var/postgres
-      - ./customPostgresql.conf:/etc/postgresql.conf
-    # command: postgres -c config_file=/etc/postgresql.conf
+      - ./custom/postgresql.conf:/etc/postgresql.conf
+      # - ./defaultpostgresql.conf:/etc/postgresql.conf
+    command: postgres #-c config_file=/etc/postgresql.conf # custom config leads to startup failure of IPv6
       
 volumes:
   pg_dbdata:
