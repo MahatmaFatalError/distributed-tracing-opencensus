@@ -1,12 +1,12 @@
 
 -- AUTO EXPLAIN
-LOAD 'auto_explain';
-SET auto_explain.log_min_duration = 0;
-SET auto_explain.log_analyze = true;
-SET auto_explain.log_format = json;
+-- LOAD 'auto_explain';
+-- SET auto_explain.log_min_duration = 0;
+-- SET auto_explain.log_analyze = true;
+-- SET auto_explain.log_format = json;
 
 
--- LOG
+-- CSV LOG VIEW
 CREATE EXTENSION file_fdw;
 CREATE SERVER pglog FOREIGN DATA WRAPPER file_fdw;
 
