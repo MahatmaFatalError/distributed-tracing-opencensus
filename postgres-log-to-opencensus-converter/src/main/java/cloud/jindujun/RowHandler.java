@@ -12,6 +12,8 @@ import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -31,9 +33,16 @@ import io.opencensus.trace.Tracing;
 import io.opencensus.trace.propagation.SpanContextParseException;
 import io.opencensus.trace.samplers.Samplers;
 
+@Component
 public class RowHandler {
 
 	private int LOCK_OFFSET_SEC = 1;
+
+	private boolean convertHierarchicalSpans;
+
+	public RowHandler(@Value("${tracing.convertHierarchicalSpans}") boolean convertHierarchicalSpans) {
+		this.convertHierarchicalSpans = convertHierarchicalSpans;
+	}
 
 	private class TimestampTuple {
 		private ZonedDateTime startTs;
@@ -95,14 +104,12 @@ public class RowHandler {
 
 		if (message != null && message.contains("-- SpanContext{traceId=TraceId{traceId=") && !message.contains("plan:")
 				&& !message.contains("still waiting for") && !message.contains(" acquired ")) {
-			
+
 			handleLockMessage(message, timestamp, pid);
 		}
 
-		if (message != null && message.contains("plan:") && "SELECT".equals(command)) {
-			
+		if (message != null && message.contains("-- SpanContext{traceId=TraceId{traceId=") && message.contains("plan:") && "SELECT".equals(command)) {
 			handleExecPlanMessage(message, timestamp);
-
 		}
 
 		if (message != null && message.contains("still waiting for")) {
@@ -129,7 +136,8 @@ public class RowHandler {
 		int newLineIndex = message.indexOf('\n');
 		String duration = message.substring(0, newLineIndex);
 
-		//LOG.info("Timestamp: " + timestamp + " Duration: " + duration + " Message: " + message);
+		// LOG.info("Timestamp: " + timestamp + " Duration: " + duration + " Message: "
+		// + message);
 		String json = message.substring(newLineIndex + 1);
 
 		try {
@@ -145,7 +153,7 @@ public class RowHandler {
 			}
 
 			collectSpansFromExecPlan(planWrapper.getPlan(), spanContext, timestamp); // TODO: timestamp von vorherigem,
-																			// initialen log des statements holen
+			// initialen log des statements holen
 		} catch (IOException e) {
 			LOG.error("Parsing the json failed ", e);
 		}
@@ -216,21 +224,42 @@ public class RowHandler {
 
 		span.setStartTime(toNanos(startTimestamp));
 
+		if (convertHierarchicalSpans) {
+			createHierachicalSpan(plan, spanContext, timestamp, span, endTimestamp);
+		} else {
+			createSpan(plan, spanContext, timestamp, span, endTimestamp);
+		}
+
+	}
+
+	private void createSpan(ExecPlan plan, SpanContext spanContext, ZonedDateTime logTimestamp, RecordEventsSpanImpl span, ZonedDateTime endTimestamp) {
 		try (Scope ws = tracer.withSpan(span)) {
 			span.addAnnotation(plan.getNodeType());
 			LOG.info("Span started with trace Id:" + span.getContext().getTraceId() + " and node " + plan.getNodeType());
-			
-			//TODO: Fix span hierarchy
-			//SpanContext subContext = SpanContext.create(spanContext.getTraceId(), span.getContext().getSpanId(), span.getContext().getTraceOptions(),
-			//		span.getContext().getTracestate());
-			for (ExecPlan subPlan : plan.getPlans()) {
 
-				collectSpansFromExecPlan(subPlan, spanContext, timestamp);
+			for (ExecPlan subPlan : plan.getPlans()) {
+				collectSpansFromExecPlan(subPlan, spanContext, logTimestamp);
 			}
 		} finally {
 			span.end(EndSpanOptions.DEFAULT, toNanos(endTimestamp));
 		}
+	}
 
+	private void createHierachicalSpan(ExecPlan plan, SpanContext spanContext, ZonedDateTime logTimestamp, RecordEventsSpanImpl span,
+			ZonedDateTime endTimestamp) {
+		try (Scope ws = tracer.withSpan(span)) {
+			span.addAnnotation(plan.getNodeType());
+			LOG.info("Span started with trace Id:" + span.getContext().getTraceId() + " and node " + plan.getNodeType());
+
+			// TODO: Fix span hierarchy
+			SpanContext subContext = SpanContext.create(spanContext.getTraceId(), span.getContext().getSpanId(), span.getContext().getTraceOptions(),
+					span.getContext().getTracestate());
+			for (ExecPlan subPlan : plan.getPlans()) {
+				collectSpansFromExecPlan(subPlan, subContext, logTimestamp);
+			}
+		} finally {
+			span.end(EndSpanOptions.DEFAULT, toNanos(endTimestamp));
+		}
 	}
 
 	private long toNanos(ZonedDateTime endTs) {
