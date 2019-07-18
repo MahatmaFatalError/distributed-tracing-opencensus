@@ -1,9 +1,13 @@
 package com.hello.config;
 
+import java.util.HashMap;
+
 import org.springframework.cache.concurrent.ConcurrentMapCache;
 import org.springframework.lang.Nullable;
 
 import io.opencensus.common.Scope;
+import io.opencensus.trace.Annotation;
+import io.opencensus.trace.AttributeValue;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.Tracer;
 import io.opencensus.trace.Tracing;
@@ -29,11 +33,13 @@ public class TracingMapCache extends ConcurrentMapCache {
 			response = super.get(key);
 			return response;
 		} finally {
+			HashMap<String, AttributeValue> map = new HashMap<String, AttributeValue>();			
 			if (response == null) {
-				span.addAnnotation("Cache Miss");
+				map.put("cache_miss", AttributeValue.booleanAttributeValue(true));
 			} else {
-				span.addAnnotation("Cache Hit");
+				map.put("cache_miss", AttributeValue.booleanAttributeValue(false));
 			}
+			span.addAnnotation(Annotation.fromDescriptionAndAttributes("Cache miss", map));
 			span.end();
 		}
 
