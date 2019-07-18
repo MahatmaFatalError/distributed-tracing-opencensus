@@ -19,45 +19,51 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 @JsonIgnoreProperties(ignoreUnknown = true)
 //@JsonNaming(PropertyNamingStrategy.SnakeCaseStrategy.class)
 @JsonRootName("Plans")
-public class ExecPlan implements Comparable<ExecPlan>{
-
+public class ExecPlan implements Comparable<ExecPlan> {
 
 	@JsonProperty("Node Type")
 	private String nodeType;
-	
+
 	@JsonProperty("Parent Relationship")
 	private String parentRelationship;
-	
+
 	@JsonProperty("Startup Cost")
 	private double startupCost;
-	
+
 	@JsonProperty("Total Cost")
 	private double totalCost;
-    
+
 	/**
-	 * in Millis
+	 * in milliseconds
 	 */
 	@JsonProperty("Actual Startup Time")
 	private Double actualStartupTime;
-	
+
 	/**
-	 * in Millis
+	 * in milliseconds
 	 */
 	@JsonProperty("Actual Total Time")
 	private Double actualTotalTime;
-	
+
 	@JsonProperty("Plan Rows")
 	private long planRows;
-	
+
 	@JsonProperty("Actual Rows")
 	private long actualRows;
-	
-	@JsonProperty("Loops")
+
+	/**
+	 * In some query plans, it is possible for a subplan node to be executed more
+	 * than once. For example, the inner index scan will be executed once per outer
+	 * row in the above nested-loop plan. In such cases, the loops value reports the
+	 * total number of executions of the node, and the actual time and rows values
+	 * shown are <b>averages per-execution</b>.
+	 */
+	@JsonProperty("Actual Loops")
 	private long loops;
-    
+
 	@JsonProperty("Plans")
 	private List<ExecPlan> plans = new ArrayList<>();
-	
+
 	public String getNodeType() {
 		return nodeType;
 	}
@@ -137,11 +143,11 @@ public class ExecPlan implements Comparable<ExecPlan>{
 	public void setPlans(List<ExecPlan> plans) {
 		this.plans = plans;
 	}
-	
+
 	public void addPlan(ExecPlan plan) {
 		this.plans.add(plan);
 	}
-	
+
 	public ExecPlan getPlan(int index) {
 		return plans.get(index);
 	}
@@ -153,29 +159,36 @@ public class ExecPlan implements Comparable<ExecPlan>{
 	public int compareTo(ExecPlan o) {
 		return this.actualStartupTime.compareTo(o.getActualStartupTime());
 	}
-	
+
 	/**
 	 * 
 	 * @param logTimestamp timestamp of log message (used as offset)
 	 * @return
 	 */
-	public ZonedDateTime getStart(ZonedDateTime logTimestamp) {	
+	public ZonedDateTime getStart(ZonedDateTime logTimestamp) {
 		return logTimestamp.plus(getStartMicroSecs(), ChronoUnit.MICROS);
-		//return logTimestamp.plusNanos(TimeUnit.MICROSECONDS.toNanos(getStartMicroSecs()));
+		// return
+		// logTimestamp.plusNanos(TimeUnit.MICROSECONDS.toNanos(getStartMicroSecs()));
 	}
-	
+
 	private long getStartMicroSecs() {
-		Double d = new Double(1000*actualStartupTime);
+		Double d = new Double(1000 * actualStartupTime);
 		return d.longValue();
 	}
-	
+
 	private long getEndMicroSecs() {
-		Double d = new Double(1000*actualTotalTime);
+		Double d = new Double(1000 * actualTotalTime);
 		return d.longValue();
 	}
-	
+
+	/**
+	 * 
+	 * @param logTimestamp offset to add to
+	 * @return timestamp aware of initial offset and number of loop
+	 */
 	public ZonedDateTime getEnd(ZonedDateTime logTimestamp) {
-		return logTimestamp.plus(getEndMicroSecs(), ChronoUnit.MICROS);
-		//return logTimestamp.plusNanos(TimeUnit.MICROSECONDS.toNanos(getEndMicroSecs()));
+		// return logTimestamp.plus(getEndMicroSecs(), ChronoUnit.MICROS);
+		return logTimestamp.plus(getEndMicroSecs() * loops, ChronoUnit.MICROS);
+		// return logTimestamp.plusNanos(TimeUnit.MICROSECONDS.toNanos(getEndMicroSecs()));
 	}
 }
