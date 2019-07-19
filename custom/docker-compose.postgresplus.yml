@@ -1,0 +1,204 @@
+version: '3'
+
+services:
+  traefik:
+    image: traefik:1.4.6
+#   restart: always
+    ports:
+      - 80:80
+      - 443:443
+    networks:
+      - web
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${TRAEFIK_TOML_FILE:-./traefik/traefik.toml}:/traefik.toml
+      - ${ACME_JSON:-./traefik/acme.json}:/acme.json
+    container_name: traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.port=8080"
+      - ${TRAEFIK_URL_CONFIG:-traefik.frontend.rule=Host:traefik.docker.localhost}
+#     - ${TRAEFIK_URL_CONFIG:-traefik.frontend.rule=Host:traefik.naturalis.nl}
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.1.0
+    volumes:
+    - elasticsearch_data:/usr/share/elasticsearch/data
+    environment:
+      # so support single node development
+      discovery.type: single-node
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    networks:
+      - web
+      - default
+    labels:
+      - "traefik.backend=naturalis-elasticsearch"
+      - "traefik.docker.network=web"
+      - "traefik.enable=true"
+      - "traefik.port=9200"
+      - ${ELASTICSEARCH_URL_CONFIG:-traefik.frontend.rule=Host:elasticsearch.docker.localhost}
+#     - ${ELASTICSEARCH_URL_CONFIG:-traefik.frontend.rule=Host:elasticsearch.naturalis.nl}
+      - ${ELASTICSEARCH_AUTH:-traefik.frontend.auth.basic=kibana:$apr1$.lcgllId$9sUY3fPk/gDuh3NQ55024/}
+
+  logstash:
+    build: ./logstash
+    volumes:
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml
+      - ./logstash/pipeline:/usr/share/logstash/pipeline
+      - pglog:/mnt/data:rw
+    ports:
+      - "5000"
+    environment:
+      LS_JAVA_OPTS: "-Xmx256m -Xms256m"
+    networks:
+      - default
+    depends_on:
+      - elasticsearch
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana-oss:6.1.0
+    expose:
+      - "5601"
+#   ports: # remove when using traefik only
+#     - "5601:5601"
+    networks:
+      - web
+      - default
+    labels:
+      - "traefik.backend=naturalis-kibana"
+      - "traefik.docker.network=web"
+      - "traefik.enable=true"
+      - "traefik.port=5601"
+      - ${KIBANA_URL_CONFIG:-traefik.frontend.rule=Host:kibana.docker.localhost}
+#     - ${KIBANA_URL_CONFIG:-traefik.frontend.rule=Host:kibana.naturalis.nl}
+      - ${KIBANA_AUTH:-traefik.frontend.auth.basic=kibana:$apr1$.lcgllId$9sUY3fPk/gDuh3NQ55024/}
+
+  grafana:
+    image: grafana/grafana:5.3.0
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASS:-secret}
+    ports: # remove when using traefik only
+      - "3000:3000"
+    expose:
+      - "3000"
+    networks:
+      - web
+      - default
+    labels:
+      - "traefik.backend=naturalis-grafana"
+      - "traefik.docker.network=web"
+      - "traefik.enable=true"
+      - "traefik.port=3000"
+      - ${GRAFANA_URL_CONFIG:-traefik.frontend.rule=Host:grafana.docker.localhost}
+#     - ${GRAFANA_URL_CONFIG:-traefik.frontend.rule=Host:grafana.naturalis.nl}
+
+  postgres:
+    shm_size: 256M
+    build: ./postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+      - ./postgres/conf.d:/conf.d
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REPLICATION_USER=${REPLICATION_USER}
+      - REPLICATION_PASSWORD=${REPLICATION_PASSWORD}
+    networks:
+      - default # postgres datasource grafana
+      - pgnet
+
+  psql:
+    build: ./psql
+    volumes:
+      - pglog:/tmp
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_DB=${POSTGRES_DB}
+    networks:
+      - pgnet
+
+  pgadmin:
+    image: dpage/pgadmin4:3.3
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+    expose:
+      - "80"
+    ports:
+      - "5050:80"
+    networks:
+      - web
+      - pgnet
+    volumes:
+      - ./pgadmin:/root/.pgadmin
+    labels:
+      - "traefik.backend=naturalis-pgadmin"
+      - "traefik.docker.network=web"
+      - "traefik.enable=true"
+      - "traefik.port=80"
+      - ${GRAFANA_URL_CONFIG:-traefik.frontend.rule=Host:pgadmin.docker.localhost}
+#     - ${GRAFANA_URL_CONFIG:-traefik.frontend.rule=Host:pgadmin.naturalis.nl}
+
+  schemaspy_nginx:
+    image: nginx:1.13.1-alpine
+    volumes:
+      - schemaspy_data:/var/www/html:ro
+      - ./schemaspy_nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    expose:
+      - "80"
+    networks:
+      - web
+    command: "nginx -g 'daemon off;'"
+    labels:
+      - "traefik.backend=naturalis-schemaspy"
+      - "traefik.docker.network=web"
+      - "traefik.enable=true"
+      - "traefik.port=80"
+      - ${GRAFANA_URL_CONFIG:-traefik.frontend.rule=Host:schemaspy.docker.localhost}
+#     - ${GRAFANA_URL_CONFIG:-traefik.frontend.rule=Host:schemaspy.naturalis.nl}
+
+  schemaspy:
+    image: schemaspy/schemaspy:snapshot
+    volumes:
+      - schemaspy_data:/output
+#     - ./schemaspy.properties:/schemaspy.properties
+    networks:
+      - pgnet
+    command: "-t pgsql -host ${POSTGRES_HOST} -port ${POSTGRES_PORT} -db ${POSTGRES_DB} -s ${POSTGRES_SCHEMA} -u ${POSTGRES_USER} -p ${POSTGRES_PASSWORD}"
+
+  sqlpad:
+    image: 'sqlpad/sqlpad:latest'
+    hostname: 'sqlpad'
+    ports:
+      - '3030:3000'
+    environment:
+      - SQLPAD_DEBUG=TRUE
+    volumes:
+      - sqlpad:/var/lib/sqlpad
+
+networks:
+  pgnet:
+    external: true
+  web:
+    external: true
+
+volumes:
+  elasticsearch_data:
+  grafana_data:
+  pgadmin_data:
+  schemaspy_data:
+  pglog:
+  pgdata:
+  pgadmin:
+  sqlpad:

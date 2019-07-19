@@ -1,26 +1,110 @@
 version: "3"
 
 services:
-  jaeger:
-    image: "jaegertracing/all-in-one:latest"
+  els:
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.8.1
+    restart: always
+    container_name: els
+    hostname: els
+#    networks:
+#    - elastic-jaeger
+    environment:
+      - bootstrap.memory_lock=true
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - esdata1:/usr/share/elasticsearch/data
+      - eslog:/usr/share/elasticsearch/logs
+      # - ./config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
+  kibana:
+    image: docker.elastic.co/kibana/kibana:6.8.1
+    ports:
+      - "5601:5601"
+    environment:
+      ELASTICSEARCH_URL: http://els:9200
+    depends_on:
+    - els
+#    networks:
+#    - elastic-jaeger
+
+#  grafana:
+#    image: grafana/grafana:latest
+#    container_name: grafana
+#    ports:
+#      - "3000:3000"
+#    environment:
+#      GF_SECURITY_ADMIN_PASSWORD: secret
+#    depends_on:
+#      - els
+#    networks:
+#      - elastic-jaeger
+    
+  jaeger-collector:
+    image: jaegertracing/jaeger-collector:latest
+    environment:
+      - SPAN_STORAGE_TYPE=elasticsearch
+      - ES_SERVER_URLS=http://els:9200
+    ports:
+      - "14269"
+      - "14268:14268"
+      - "14267"
+      - "14250"
+      - "9411:9411"
+    restart: on-failure
+#    networks:
+#    - elastic-jaeger
+    depends_on:
+    - els
+    links:
+    - els
+    command: ["--es.tags-as-fields.all=true", "--es.num-shards=1", "--log-level=error"]
+
+  jaeger-agent:
+    image: jaegertracing/jaeger-agent:latest
+    environment:
+      - SPAN_STORAGE_TYPE=elasticsearch
+    command: ["--collector.host-port=jaeger-collector:14267"]
     ports:
       - "5775:5775/udp"
       - "6831:6831/udp"
       - "6832:6832/udp"
       - "5778:5778"
+    restart: on-failure
+    depends_on:
+      - jaeger-collector
+#    networks:
+#    - elastic-jaeger
+
+  jaeger-query:
+    image: jaegertracing/jaeger-query:latest
+    environment:
+      - SPAN_STORAGE_TYPE=elasticsearch
+      - ES_SERVER_URLS=http://els:9200
+    ports:
       - "16686:16686"
-      - "14268:14268"
-      - "9411:9411"
+      - "16687"
+    restart: on-failure
+    command: ["--log-level=debug"]
+    depends_on:
+      - jaeger-agent
+#    networks:
+#    - elastic-jaeger
+      
 
   hello-service:
     build: ./hello-service
     ports:
       - "8888:8888"
     environment:
-      JAEGER_HOST: jaeger
+      JAEGER_HOST: jaeger-collector
       PG_HOST: db-postgres
     links:
-      - jaeger
+      - jaeger-agent
       - db-postgres
 
   greetings-service:
@@ -29,11 +113,11 @@ services:
       - "8080:8080"
     environment:
       HELLO_SERVICE_HOST: hello-service
-      JAEGER_HOST: jaeger
+      JAEGER_HOST: jaeger-collector
       PG_HOST: db-postgres
     links:
        - hello-service
-       - jaeger
+       - jaeger-agent
        - db-postgres
 
   db-postgres:
@@ -48,7 +132,13 @@ services:
       
 volumes:
   pg_dbdata:
-
+  esdata1:
+    driver: local
+  eslog:
+    driver: local
+#networks:
+#  elastic-jaeger:
+#    driver: bridge
 
 
 
