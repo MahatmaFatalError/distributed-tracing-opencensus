@@ -148,7 +148,8 @@ public class RowHandler {
 				try {
 					SpanContext spanContext = traceContextLoader.loadSpanContext(message);
 
-					SpanBuilder spanBuilder = tracer.spanBuilderWithRemoteParent("DB exec plan", spanContext).setRecordEvents(true).setSampler(Samplers.alwaysSample());
+					SpanBuilder spanBuilder = tracer.spanBuilderWithRemoteParent("DB exec plan", spanContext).setRecordEvents(true)
+							.setSampler(Samplers.alwaysSample());
 					RecordEventsSpanImpl span = (RecordEventsSpanImpl) spanBuilder.startSpan();
 					ZonedDateTime startTimestamp = timestamp;
 					ZonedDateTime endTimestamp = timestamp.plus(getEndMicroSecs(durationInMsDouble), ChronoUnit.MICROS);
@@ -156,9 +157,9 @@ public class RowHandler {
 
 					try (Scope ws = tracer.withSpan(span)) {
 						collectSpansFromExecPlanPreOrder(planWrapper.getPlan(), span, timestamp); // TODO: timestamp von vorherigem, initialen log
-																												// des statements holen
-						
-						//collectSpansFromExecPlanPostOrder(planWrapper.getPlan(), span, timestamp, null);
+																									// des statements holen
+
+						// collectSpansFromExecPlanPostOrder(planWrapper.getPlan(), span, timestamp, null);
 					} finally {
 						span.end(EndSpanOptions.DEFAULT, toNanos(endTimestamp));
 					}
@@ -192,12 +193,11 @@ public class RowHandler {
 			return;
 		}
 
-		//SpanBuilder spanBuilder = defaultSpanBuilder;
+		// SpanBuilder spanBuilder = defaultSpanBuilder;
 		SpanBuilder spanBuilder = tracer.spanBuilder(plan.getNodeType());
 		// SpanBuilder spanBuilder =
 		// tracer.spanBuilderWithExplicitParent(plan.getNodeType(), parentSpan);
-		
-		
+
 		for (ExecPlan subPlan : plan.getPlans()) {
 			collectSpansFromExecPlanPostOrder(subPlan, null, timestamp, spanBuilder);
 		}
@@ -208,7 +208,6 @@ public class RowHandler {
 			span.addAnnotation(plan.getNodeType());
 			LOG.info("Span started with trace Id:" + span.getContext().getTraceId() + " and node " + plan.getNodeType());
 
-			
 		} finally {
 			span.end(EndSpanOptions.DEFAULT, toNanos(endTimestamp));
 		}
