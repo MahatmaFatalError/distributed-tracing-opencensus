@@ -52,6 +52,32 @@ public class TracingWrappedJdbcTemplate extends org.springframework.jdbc.core.Jd
 	public TracingWrappedJdbcTemplate(DataSource dataSource) {
 		super(dataSource);
 	}
+	
+	
+	@Override
+	public void execute(final String sql) throws DataAccessException {
+		if (logger.isDebugEnabled()) {
+			logger.debug("Executing SQL statement [" + sql + "]");
+		}
+		
+		SpanContext context = tracer.getCurrentSpan().getContext();
+		String traceSQL = String.format("-- %s \n %s", context.toString(), sql);
+
+		class ExecuteStatementCallback implements StatementCallback<Object>, SqlProvider {
+			@Override
+			@Nullable
+			public Object doInStatement(Statement stmt) throws SQLException {
+				stmt.execute(traceSQL);
+				return null;
+			}
+			@Override
+			public String getSql() {
+				return traceSQL;
+			}
+		}
+
+		execute(new ExecuteStatementCallback());
+	}
 
 	// -------------------------------------------------------------------------
 	// Methods dealing with prepared statements

@@ -37,7 +37,7 @@ public class GreetingsService {
             span.setStatus(Status.ABORTED);
             span.addAnnotation("Error while calling service");
             LOG.error("Error while calling service: {}", e.getMessage());
-            result = "";
+            result = e.getMessage();
         }
         span.end();
         return result;
