@@ -280,7 +280,7 @@ public class RowHandler {
 			long endNanos = toNanos(endTs);
 
 			span.setStartTime(startNanos);
-			LOG.info("Span started with trace Id:" + span.getContext().getTraceId());
+			LOG.info("Entering Lock-Wait for Span with trace Id:" + span.getContext().getTraceId());
 
 			try (Scope ws = tracer.withSpan(span)) {
 				span.addAnnotation(message);
