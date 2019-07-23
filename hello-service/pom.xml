@@ -53,6 +53,11 @@
 			<version>${io-opencensus.version}</version>
 			<scope>runtime</scope>
 		</dependency>
+		<dependency>
+			<groupId>io.opencensus</groupId>
+			<artifactId>opencensus-impl-core</artifactId>
+			<version>0.23.1</version>
+		</dependency>
 
 
 		<!-- Database -->

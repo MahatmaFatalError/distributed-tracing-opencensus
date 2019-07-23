@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import com.hello.utils.SpanUtils;
 
+import io.opencensus.implcore.trace.RecordEventsSpanImpl;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.Tracer;
 import io.opencensus.trace.Tracing;
@@ -30,7 +31,7 @@ public class HelloService {
 
 	@Cacheable("hello_cache")
 	public String printHello() {
-		Span span = SpanUtils.buildSpan(tracer, "HelloService printHello").startSpan();
+		RecordEventsSpanImpl span = (RecordEventsSpanImpl) SpanUtils.buildSpan(tracer, "HelloService printHello").startSpan();
 		String helloStr = "Hello from ";
 		LOG.info("Printing hello");
 
@@ -42,7 +43,7 @@ public class HelloService {
 		String name = (String) result.get(0).get("name");
 		span.addAnnotation(name);
 		helloStr += name;
-		span.end();
+		SpanUtils.closeSpan(span);
 		return helloStr;
 	}
 
