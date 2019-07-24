@@ -37,5 +37,4 @@ public class GreetingsController {
         span.end();
         return result;
     }
-
 }

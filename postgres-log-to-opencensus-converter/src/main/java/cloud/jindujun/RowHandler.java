@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.joor.Reflect;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,16 +22,16 @@ import org.springframework.stereotype.Component;
 import cloud.jindujun.executionplan.ExecPlan;
 import cloud.jindujun.executionplan.ExecPlanJsonParser;
 import cloud.jindujun.executionplan.PlanEnvelop;
-import io.opencensus.common.Scope;
-import io.opencensus.implcore.trace.RecordEventsSpanImpl;
-import io.opencensus.trace.EndSpanOptions;
-import io.opencensus.trace.Span;
-import io.opencensus.trace.SpanBuilder;
-import io.opencensus.trace.SpanContext;
-import io.opencensus.trace.Tracer;
-import io.opencensus.trace.Tracing;
-import io.opencensus.trace.propagation.SpanContextParseException;
-import io.opencensus.trace.samplers.Samplers;
+import io.jaegertracing.Configuration;
+import io.jaegertracing.Configuration.ReporterConfiguration;
+import io.jaegertracing.Configuration.SamplerConfiguration;
+import io.jaegertracing.internal.JaegerSpan;
+import io.jaegertracing.internal.JaegerSpanContext;
+import io.jaegertracing.internal.JaegerTracer;
+import io.opentracing.Span;
+import io.opentracing.SpanContext;
+import io.opentracing.Tracer;
+
 
 @Component
 public class RowHandler {
@@ -80,7 +81,7 @@ public class RowHandler {
 	 */
 	Map<Integer, Map<String, TimestampTuple>> gatheredTimeSpans = new HashMap<>();
 
-	private static final Tracer tracer = Tracing.getTracer();
+	private static final Tracer tracer = initTracer("PostgreSQL-Log");
 
 	private static final Logger LOG = LoggerFactory.getLogger(RowHandler.class);
 
@@ -147,33 +148,21 @@ public class RowHandler {
 			try {
 				LOG.info("Execution Plan found: ");// + json);
 				PlanEnvelop planWrapper = ExecPlanJsonParser.getInstance().parse(json);
-				try {
-					SpanContext spanContext = traceContextLoader.loadSpanContext(message);
 
-					SpanBuilder spanBuilder = tracer.spanBuilderWithRemoteParent("DB exec plan", spanContext).setRecordEvents(true)
-							.setSampler(Samplers.alwaysSample());
+				SpanContext spanContext = traceContextLoader.loadSpanContext(message);
 
-					if (convertHierarchicalSpans) {
-						RecordEventsSpanImpl span = (RecordEventsSpanImpl) spanBuilder.startSpan();
-						ZonedDateTime startTimestamp = timestamp;
-						ZonedDateTime endTimestamp = timestamp.plus(getEndMicroSecs(durationInMsDouble), ChronoUnit.MICROS);
-						span.setStartTime(toNanos(startTimestamp));
 
-						try (Scope ws = tracer.withSpan(span)) {
+				if (convertHierarchicalSpans) {
+					ZonedDateTime startTimestamp = timestamp;
+					ZonedDateTime endTimestamp = timestamp.plus(getEndMicroSecs(durationInMsDouble), ChronoUnit.MICROS);
 
-							collectSpansFromExecPlanPreOrder(planWrapper.getPlan(), span, timestamp); // TODO: timestamp von vorherigem, initialen log
-							// des statements holen
+					JaegerSpan span = startSpan(spanContext, startTimestamp, "execPlan");
 
-							// collectSpansFromExecPlanPostOrder(planWrapper.getPlan(), span, timestamp, null);
+					collectSpansFromExecPlanPreOrder(planWrapper.getPlan(), span, timestamp); // TODO: timestamp von vorherigem, initialen log des statements holen
 
-						} finally {
-							closeSpan(span, endTimestamp);
-						}
-					} else {
-						collectSpansFromExecPlan(planWrapper.getPlan(), spanContext, timestamp);
-					}
-				} catch (SpanContextParseException e) {
-					LOG.warn("Parent Span is not present");
+					closeSpan(span, endTimestamp);
+				} else {
+					collectSpansFromExecPlan(planWrapper.getPlan(), spanContext, timestamp);
 				}
 
 			} catch (IOException e) {
@@ -182,47 +171,53 @@ public class RowHandler {
 		}
 	}
 
+	private JaegerSpan startSpan(SpanContext spanContext, ZonedDateTime startTimestamp, String operationName) {
+		JaegerSpan span = (JaegerSpan) tracer.buildSpan(operationName).asChildOf(spanContext).start();
+		long startMicros = TimeUnit.MILLISECONDS.toMicros(startTimestamp.toInstant().toEpochMilli());
+		Reflect.on(span).set("startTimeMicroseconds", startMicros);
+		return span;
+	}
+
 
 	private long getEndMicroSecs(Double durationInMsDouble) {
-		Double d = new Double(1000 * durationInMsDouble);
+		Double d = Double.valueOf(1000 * durationInMsDouble);
 		return d.longValue();
 	}
 
-	private void collectSpansFromExecPlanPostOrder(ExecPlan plan, Span parentSpan, ZonedDateTime timestamp, SpanBuilder defaultSpanBuilder) {
-		ZonedDateTime startTimestamp = plan.getStart(timestamp);
-		ZonedDateTime endTimestamp = plan.getEnd(timestamp);
-
-		LOG.info("startTimestamp	: " + startTimestamp + " of node " + plan.getNodeType());
-		LOG.info("endTimestamp	: " + endTimestamp + " of node " + plan.getNodeType());
-
-		Duration duration = Duration.between(startTimestamp, endTimestamp);
-		LOG.info("Duration (in ns)	: " + duration.getNano() + " of node " + plan.getNodeType());
-
-		if (endTimestamp.isBefore(startTimestamp)) {
-			LOG.info("Plan	: " + plan.getNodeType() + " is corrupt");
-			return;
-		}
-
-		// SpanBuilder spanBuilder = defaultSpanBuilder;
-		SpanBuilder spanBuilder = tracer.spanBuilder(plan.getNodeType());
-		// SpanBuilder spanBuilder =
-		// tracer.spanBuilderWithExplicitParent(plan.getNodeType(), parentSpan);
-
-		for (ExecPlan subPlan : plan.getPlans()) {
-			collectSpansFromExecPlanPostOrder(subPlan, null, timestamp, spanBuilder);
-		}
-		RecordEventsSpanImpl span = (RecordEventsSpanImpl) spanBuilder.startSpan();
-		span.setStartTime(toNanos(startTimestamp));
-
-		try (Scope ws = tracer.withSpan(span)) {
-			span.addAnnotation(plan.getNodeType());
-			LOG.info("Span started with trace Id:" + span.getContext().getTraceId() + " and node " + plan.getNodeType());
-
-		} finally {
-			closeSpan(span, endTimestamp);
-		}
-
-	}
+//	private void collectSpansFromExecPlanPostOrder(ExecPlan plan, Span parentSpan, ZonedDateTime timestamp, SpanBuilder defaultSpanBuilder) {
+//		ZonedDateTime startTimestamp = plan.getStart(timestamp);
+//		ZonedDateTime endTimestamp = plan.getEnd(timestamp);
+//
+//		LOG.info("startTimestamp	: " + startTimestamp + " of node " + plan.getNodeType());
+//		LOG.info("endTimestamp	: " + endTimestamp + " of node " + plan.getNodeType());
+//
+//		Duration duration = Duration.between(startTimestamp, endTimestamp);
+//		LOG.info("Duration (in ns)	: " + duration.getNano() + " of node " + plan.getNodeType());
+//
+//		if (endTimestamp.isBefore(startTimestamp)) {
+//			LOG.info("Plan	: " + plan.getNodeType() + " is corrupt");
+//			return;
+//		}
+//
+//		// SpanBuilder spanBuilder = defaultSpanBuilder;
+//		SpanBuilder spanBuilder = tracer.spanBuilder(plan.getNodeType());
+//		// SpanBuilder spanBuilder =
+//		// tracer.spanBuilderWithExplicitParent(plan.getNodeType(), parentSpan);
+//
+//		for (ExecPlan subPlan : plan.getPlans()) {
+//			collectSpansFromExecPlanPostOrder(subPlan, null, timestamp, spanBuilder);
+//		}
+//		RecordEventsSpanImpl span = (RecordEventsSpanImpl) spanBuilder.startSpan();
+//		span.setStartTime(toNanos(startTimestamp));
+//
+//		try (Scope ws = tracer.withSpan(span)) {
+//			span.addAnnotation(plan.getNodeType());
+//			LOG.info("Span started with trace Id:" + span.getContext().getTraceId() + " and node " + plan.getNodeType());
+//
+//		} finally {
+//			closeSpan(span, endTimestamp);
+//		}
+//	}
 
 	private void collectSpansFromExecPlanPreOrder(ExecPlan plan, Span parentSpan, ZonedDateTime timestamp) {
 		ZonedDateTime startTimestamp = plan.getStart(timestamp);
@@ -240,106 +235,91 @@ public class RowHandler {
 		}
 
 		// SpanBuilder spanBuilder = tracer.spanBuilder(plan.getNodeType());
-		SpanBuilder spanBuilder = tracer.spanBuilderWithExplicitParent(plan.getNodeType(), parentSpan);
-		RecordEventsSpanImpl span = (RecordEventsSpanImpl) spanBuilder.startSpan();
-		span.setStartTime(toNanos(startTimestamp));
+		JaegerSpan span = (JaegerSpan) tracer.buildSpan(plan.getNodeType()).asChildOf(parentSpan).start();
+		long startMicros = TimeUnit.MILLISECONDS.toMicros(startTimestamp.toInstant().toEpochMilli());
+		Reflect.on(span).set("startTimeMicroseconds", startMicros);
 
-		try (Scope ws = tracer.withSpan(span)) {
-			span.addAnnotation(plan.getNodeType());
-			LOG.info("Span started with trace Id:" + span.getContext().getTraceId() + " and node " + plan.getNodeType());
+		//LOG.info("Span started with trace Id:" + span.getContext().getTraceId() + " and node " + plan.getNodeType());
 
-			for (ExecPlan subPlan : plan.getPlans()) {
-				collectSpansFromExecPlanPreOrder(subPlan, span, timestamp);
-			}
-		} finally {
-			closeSpan(span, endTimestamp);
+		for (ExecPlan subPlan : plan.getPlans()) {
+			collectSpansFromExecPlanPreOrder(subPlan, span, timestamp);
 		}
+		closeSpan(span, endTimestamp);
 
+	}
+
+	private void closeSpan(JaegerSpan span, ZonedDateTime endTimestamp) {
+		long finishMicros = TimeUnit.MILLISECONDS.toMicros(endTimestamp.toInstant().toEpochMilli());
+		span.finish(finishMicros);
 	}
 
 	/**
 	 * old style
-	 * 
+	 *
 	 * @param plan
 	 * @param spanContext
 	 * @param timestamp
 	 */
 	private void collectSpansFromExecPlan(ExecPlan plan, SpanContext spanContext, ZonedDateTime timestamp) {
-		SpanBuilder spanBuilder = tracer.spanBuilderWithRemoteParent("exec plan node " + plan.getNodeType(), spanContext).setRecordEvents(true)
-				.setSampler(Samplers.alwaysSample());
-
-		RecordEventsSpanImpl span = (RecordEventsSpanImpl) spanBuilder.startSpan();
-
-		ZonedDateTime startTimestamp = plan.getStart(timestamp);
-		ZonedDateTime endTimestamp = plan.getEnd(timestamp);
-
-		LOG.info("startTimestamp	: " + startTimestamp + " of node " + plan.getNodeType());
-		LOG.info("endTimestamp	: " + endTimestamp + " of node " + plan.getNodeType());
-
-		Duration duration = Duration.between(startTimestamp, endTimestamp);
-		LOG.info("Duration (in ns)	: " + duration.getNano() + " of node " + plan.getNodeType());
-
-		span.setStartTime(toNanos(startTimestamp));
-
-		try (Scope ws = tracer.withSpan(span)) {
-			span.addAnnotation(plan.getNodeType());
-			LOG.info("Span started with trace Id:" + span.getContext().getTraceId() + " and node " + plan.getNodeType());
-
-			// TODO: Fix span hierarchy
-			// SpanContext subContext = SpanContext.create(spanContext.getTraceId(), span.getContext().getSpanId(), span.getContext().getTraceOptions(),
-			// span.getContext().getTracestate());
-			for (ExecPlan subPlan : plan.getPlans()) {
-				collectSpansFromExecPlan(subPlan, spanContext, timestamp);
-			}
-		} finally {
-			closeSpan(span, endTimestamp);
-		}
+//		SpanBuilder spanBuilder = tracer.spanBuilderWithRemoteParent("exec plan node " + plan.getNodeType(), spanContext).setRecordEvents(true)
+//				.setSampler(Samplers.alwaysSample());
+//
+//		RecordEventsSpanImpl span = (RecordEventsSpanImpl) spanBuilder.startSpan();
+//
+//		ZonedDateTime startTimestamp = plan.getStart(timestamp);
+//		ZonedDateTime endTimestamp = plan.getEnd(timestamp);
+//
+//		LOG.info("startTimestamp	: " + startTimestamp + " of node " + plan.getNodeType());
+//		LOG.info("endTimestamp	: " + endTimestamp + " of node " + plan.getNodeType());
+//
+//		Duration duration = Duration.between(startTimestamp, endTimestamp);
+//		LOG.info("Duration (in ns)	: " + duration.getNano() + " of node " + plan.getNodeType());
+//
+//		span.setStartTime(toNanos(startTimestamp));
+//
+//		try (Scope ws = tracer.withSpan(span)) {
+//			span.addAnnotation(plan.getNodeType());
+//			LOG.info("Span started with trace Id:" + span.getContext().getTraceId() + " and node " + plan.getNodeType());
+//
+//			// TODO: Fix span hierarchy
+//			// SpanContext subContext = SpanContext.create(spanContext.getTraceId(), span.getContext().getSpanId(), span.getContext().getTraceOptions(),
+//			// span.getContext().getTracestate());
+//			for (ExecPlan subPlan : plan.getPlans()) {
+//				collectSpansFromExecPlan(subPlan, spanContext, timestamp);
+//			}
+//		} finally {
+//			closeSpan(span, endTimestamp);
+//		}
 
 	}
 
 	private void handleLockMessage(String message, ZonedDateTime timestamp, Integer pid) {
-		SpanBuilder spanBuilder = null;
-		SpanContext spanContext = null;
-		LOG.info("Timestamp: " + timestamp + " Message: " + message);
-		try {
-			spanContext = traceContextLoader.loadSpanContext(message);
-		} catch (SpanContextParseException e) {
-			LOG.warn("Parent Span is not present");
-		}
+
+		JaegerSpanContext spanContext = traceContextLoader.loadSpanContext(message);
 
 		Map<String, TimestampTuple> relationTsTupleMap = gatheredTimeSpans.get(pid);
 		if (relationTsTupleMap != null) {
 
-			spanBuilder = tracer.spanBuilderWithRemoteParent("wait for lock", spanContext).setRecordEvents(true).setSampler(Samplers.alwaysSample());
 
-			pidTraceMapping.put(pid, spanContext.getTraceId().toString());
+			pidTraceMapping.put(pid, spanContext.getTraceId());
 
-			Span tempspan = spanBuilder.startSpan();
-			RecordEventsSpanImpl span = (RecordEventsSpanImpl) tempspan;
-
-			// https://github.com/census-instrumentation/opencensus-java/issues/1905
-			// https://github.com/census-instrumentation/opencensus-java/pull/1906
 
 			TimestampTuple timestampTuple = relationTsTupleMap.get("TODO_RELATION");
-
-			ZonedDateTime startTs = timestampTuple.getStartTs();
-			long startNanos = toNanos(startTs) - TimeUnit.SECONDS.toNanos(LOCK_OFFSET_SEC);
+			ZonedDateTime startTs = timestampTuple.getStartTs().minusSeconds(LOCK_OFFSET_SEC);
+			JaegerSpan span = startSpan(spanContext, startTs, "wait for lock");
+			span.setTag("sql", message);
 
 			ZonedDateTime endTs = timestampTuple.getEndTs();
+			closeSpan(span, endTs);
 
-			long endNanos = toNanos(endTs);
-
-			span.setStartTime(startNanos);
-			LOG.info("Entering Lock-Wait for Span with trace Id:" + span.getContext().getTraceId());
-
-			try (Scope ws = tracer.withSpan(span)) {
-				span.addAnnotation(message);
-				gatheredTimeSpans.remove(pid);
-			} finally {
-				span.end(EndSpanOptions.DEFAULT, endNanos);
-			}
 		}
 	}
 
 
+	public static JaegerTracer initTracer(String service) {
+		SamplerConfiguration samplerConfig = SamplerConfiguration.fromEnv().withType("const").withParam(1);
+		ReporterConfiguration reporterConfig = ReporterConfiguration.fromEnv().withLogSpans(true);
+		Configuration config = new Configuration(service).withSampler(samplerConfig).withReporter(reporterConfig);
+		return config.getTracer();
+	}
 }

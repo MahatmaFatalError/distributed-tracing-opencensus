@@ -19,8 +19,8 @@ public class SpanUtils {
 	public static void closeSpan(RecordEventsSpanImpl span) {
 		span.end();
 
-		LOG.info("Closing span {} of trace {} with start: {} and end: {}", span.getContext().getSpanId(), span.getContext().getTraceId(),
-				getInstantFromNanos(span.getStartNanoTime()), getInstantFromNanos(span.getEndNanoTime()));
+		LOG.info("Closing span {} of trace {} : {} and end: {}", span.getContext().getSpanId(), span.getContext().getTraceId(),
+				(span.getName()), getInstantFromNanos(span.getEndNanoTime()));
 	}
 
 	public static long toNanos(ZonedDateTime endTs) {
@@ -30,7 +30,7 @@ public class SpanUtils {
 	public static Instant getInstantFromNanos(Long nanosSinceEpoch) {
 		return Instant.ofEpochSecond(0L, nanosSinceEpoch);
 	}
-	
+
     public static SpanBuilder buildSpan(Tracer tracer, String name) {
         return tracer.spanBuilder(name)
                 .setRecordEvents(true)

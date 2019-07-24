@@ -161,7 +161,7 @@ public class ExecPlan implements Comparable<ExecPlan> {
 	}
 
 	/**
-	 * 
+	 *
 	 * @param logTimestamp timestamp of log message (used as offset)
 	 * @return
 	 */
@@ -172,17 +172,17 @@ public class ExecPlan implements Comparable<ExecPlan> {
 	}
 
 	private long getStartMicroSecs() {
-		Double d = new Double(1000 * actualStartupTime);
+		Double d = Double.valueOf(1000 * actualStartupTime);
 		return d.longValue();
 	}
 
 	private long getEndMicroSecs() {
-		Double d = new Double(1000 * actualTotalTime);
+		Double d = Double.valueOf(1000 * actualTotalTime);
 		return d.longValue();
 	}
 
 	/**
-	 * 
+	 *
 	 * @param logTimestamp offset to add to
 	 * @return timestamp aware of initial offset and number of loop
 	 */
