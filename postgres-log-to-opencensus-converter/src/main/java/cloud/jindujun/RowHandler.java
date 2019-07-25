@@ -32,7 +32,6 @@ import io.opentracing.Span;
 import io.opentracing.SpanContext;
 import io.opentracing.Tracer;
 
-
 @Component
 public class RowHandler {
 
@@ -77,6 +76,11 @@ public class RowHandler {
 	Map<Integer, String> pidTraceMapping = new HashMap<>();
 
 	/*
+	 * Map<pid,start date of first SELECT>
+	 */
+	Map<Integer, ZonedDateTime> pidEffectiveStartMapping = new HashMap<>();
+
+	/*
 	 * Map<pid, Map<TableId,TimestampTuple>>
 	 */
 	Map<Integer, Map<String, TimestampTuple>> gatheredTimeSpans = new HashMap<>();
@@ -101,40 +105,49 @@ public class RowHandler {
 	}
 
 	public void convert(String message, ZonedDateTime timestamp, Integer pid, String command) {
+		if (message != null) {
+			if (message.contains("-- SpanContext{traceId=TraceId{traceId=")) {
 
-		if (message != null && message.contains("-- SpanContext{traceId=TraceId{traceId=") && !message.contains("plan:")
-				&& !message.contains("still waiting for") && !message.contains(" acquired ")) {
+				if (!message.contains("plan:") && !message.contains("still waiting for") && !message.contains(" acquired ")) {
+					createLockSpan(message, timestamp, pid);
+				}
 
-			handleLockMessage(message, timestamp, pid);
-		}
 
-		if (message != null && message.contains("-- SpanContext{traceId=TraceId{traceId=") && message.contains("plan:") && "SELECT".equals(command)) {
-			handleExecPlanMessage(message, timestamp);
-		}
+				if (message.startsWith("execute ") && "SELECT".equals(command)) {
+					pidEffectiveStartMapping.put(pid, timestamp);
+				}
 
-		if (message != null && message.contains("still waiting for")) {
-			LOG.info("Timestamp: " + timestamp + " Message: " + message);
-			Map<String, TimestampTuple> value = new HashMap<>();
-			TimestampTuple tsTuple = new TimestampTuple().setStartTs(timestamp);
-			value.put("TODO_RELATION", tsTuple); // Eigenen Lock Context speichern
+				if (message.contains("plan:") && "SELECT".equals(command)) {
+					handleExecPlanMessage(message, pid);
+				}
+			}
 
-			gatheredTimeSpans.put(pid, value);
+			if (message.contains("still waiting for")) {
+				LOG.info("Timestamp: " + timestamp + " Message: " + message);
+				Map<String, TimestampTuple> value = new HashMap<>();
+				TimestampTuple tsTuple = new TimestampTuple().setStartTs(timestamp);
+				value.put("TODO_RELATION", tsTuple); // Eigenen Lock Context speichern
 
-			waitingPids.put(pid, timestamp);
+				gatheredTimeSpans.put(pid, value);
 
-		} else if (message != null && message.contains(" acquired ") && waitingPids.containsKey(pid)) {
-			LOG.info("Timestamp: " + timestamp + " Message: " + message);
-			Map<String, TimestampTuple> relationTsTupleMap = gatheredTimeSpans.get(pid);
-			TimestampTuple timestampTuple = relationTsTupleMap.get("TODO_RELATION");
-			timestampTuple.setEndTs(timestamp);
-			relationTsTupleMap.put("TODO_RELATION", timestampTuple);
+				waitingPids.put(pid, timestamp);
 
+			} else if (message.contains(" acquired ") && waitingPids.containsKey(pid)) {
+				LOG.info("Timestamp: " + timestamp + " Message: " + message);
+				Map<String, TimestampTuple> relationTsTupleMap = gatheredTimeSpans.get(pid);
+				TimestampTuple timestampTuple = relationTsTupleMap.get("TODO_RELATION");
+				timestampTuple.setEndTs(timestamp);
+				relationTsTupleMap.put("TODO_RELATION", timestampTuple);
+
+			}
 		}
 	}
 
-	private void handleExecPlanMessage(String message, ZonedDateTime timestamp) {
+	private void handleExecPlanMessage(String message, Integer pid) {
 		int newLineIndex = message.indexOf('\n');
 		String duration = message.substring(0, newLineIndex);
+
+		ZonedDateTime timestamp = pidEffectiveStartMapping.remove(pid); // timestamp von vorherigem, initialen log des statements holen
 
 		LOG.info("Timestamp: " + timestamp + " Duration: " + duration + " Message: " + message);
 		Pattern pattern = Pattern.compile("duration: (.*) ms.*");
@@ -151,14 +164,13 @@ public class RowHandler {
 
 				SpanContext spanContext = traceContextLoader.loadSpanContext(message);
 
-
 				if (convertHierarchicalSpans) {
 					ZonedDateTime startTimestamp = timestamp;
 					ZonedDateTime endTimestamp = timestamp.plus(getEndMicroSecs(durationInMsDouble), ChronoUnit.MICROS);
 
 					JaegerSpan span = startSpan(spanContext, startTimestamp, "execPlan");
 
-					collectSpansFromExecPlanPreOrder(planWrapper.getPlan(), span, timestamp); // TODO: timestamp von vorherigem, initialen log des statements holen
+					collectSpansFromExecPlanPreOrder(planWrapper.getPlan(), span, timestamp);
 
 					closeSpan(span, endTimestamp);
 				} else {
@@ -177,7 +189,6 @@ public class RowHandler {
 		Reflect.on(span).set("startTimeMicroseconds", startMicros);
 		return span;
 	}
-
 
 	private long getEndMicroSecs(Double durationInMsDouble) {
 		Double d = Double.valueOf(1000 * durationInMsDouble);
@@ -239,7 +250,7 @@ public class RowHandler {
 		long startMicros = TimeUnit.MILLISECONDS.toMicros(startTimestamp.toInstant().toEpochMilli());
 		Reflect.on(span).set("startTimeMicroseconds", startMicros);
 
-		//LOG.info("Span started with trace Id:" + span.getContext().getTraceId() + " and node " + plan.getNodeType());
+		// LOG.info("Span started with trace Id:" + span.getContext().getTraceId() + " and node " + plan.getNodeType());
 
 		for (ExecPlan subPlan : plan.getPlans()) {
 			collectSpansFromExecPlanPreOrder(subPlan, span, timestamp);
@@ -293,16 +304,14 @@ public class RowHandler {
 
 	}
 
-	private void handleLockMessage(String message, ZonedDateTime timestamp, Integer pid) {
+	private void createLockSpan(String message, ZonedDateTime timestamp, Integer pid) {
 
 		JaegerSpanContext spanContext = traceContextLoader.loadSpanContext(message);
 
 		Map<String, TimestampTuple> relationTsTupleMap = gatheredTimeSpans.get(pid);
 		if (relationTsTupleMap != null) {
 
-
 			pidTraceMapping.put(pid, spanContext.getTraceId());
-
 
 			TimestampTuple timestampTuple = relationTsTupleMap.get("TODO_RELATION");
 			ZonedDateTime startTs = timestampTuple.getStartTs().minusSeconds(LOCK_OFFSET_SEC);
@@ -314,7 +323,6 @@ public class RowHandler {
 
 		}
 	}
-
 
 	public static JaegerTracer initTracer(String service) {
 		SamplerConfiguration samplerConfig = SamplerConfiguration.fromEnv().withType("const").withParam(1);
