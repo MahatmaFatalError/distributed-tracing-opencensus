@@ -31,6 +31,8 @@ public class TraceContextLoader {
 
 
 	public JaegerSpanContext loadSpanContext(String carrier)  {
+
+
 		return extract(extraceTraceId(carrier), extractSpanId(carrier));
 	}
 
@@ -45,7 +47,7 @@ public class TraceContextLoader {
 		traceIdLow = HexCodec.lowerHexToUnsignedLong(traceId);
 		traceIdHigh = HexCodec.higherHexToUnsignedLong(traceId);
 
-		parentId = HexCodec.lowerHexToUnsignedLong(parenSpanId);
+		spanId = HexCodec.lowerHexToUnsignedLong(parenSpanId);
 
 		JaegerSpanContext spanContext = new JaegerSpanContext(traceIdHigh, traceIdLow, spanId, parentId, flags);
 		if (baggage != null) {
