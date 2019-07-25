@@ -16,7 +16,7 @@ public class TraceContextLoaderTest {
 		JaegerSpanContext spanContext = new TraceContextLoader().loadSpanContext(message);
 
 		assertEquals("c0bdde80a21a5802de1adb411946eb17", spanContext.getTraceId());
-		assertEquals("b275e297be6a303c", spanContext.getSpanId());
+		assertEquals(HexCodec.lowerHexToUnsignedLong("b275e297be6a303c").longValue(), spanContext.getSpanId());
 
 		// TODO: mit spy den internen TraceContext holen und asserten
 	}
