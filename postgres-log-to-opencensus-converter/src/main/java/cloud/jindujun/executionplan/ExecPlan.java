@@ -33,6 +33,9 @@ public class ExecPlan implements Comparable<ExecPlan> {
 	@JsonProperty("Total Cost")
 	private double totalCost;
 
+	@JsonProperty("Parallel Aware")
+	private boolean parallelAware;
+
 	/**
 	 * in milliseconds
 	 */
@@ -152,6 +155,14 @@ public class ExecPlan implements Comparable<ExecPlan> {
 		return plans.get(index);
 	}
 
+	public boolean isParallelAware() {
+		return parallelAware;
+	}
+
+	public void setParallelAware(boolean parallelAware) {
+		this.parallelAware = parallelAware;
+	}
+
 	/**
 	 * @return negative if this plan happened before the provided plan
 	 */
@@ -187,8 +198,11 @@ public class ExecPlan implements Comparable<ExecPlan> {
 	 * @return timestamp aware of initial offset and number of loop
 	 */
 	public ZonedDateTime getEnd(ZonedDateTime logTimestamp) {
-		// return logTimestamp.plus(getEndMicroSecs(), ChronoUnit.MICROS);
-		return logTimestamp.plus(getEndMicroSecs() * loops, ChronoUnit.MICROS);
-		// return logTimestamp.plusNanos(TimeUnit.MICROSECONDS.toNanos(getEndMicroSecs()));
+		if (isParallelAware()) {
+			return logTimestamp.plus(getEndMicroSecs(), ChronoUnit.MICROS);
+		} else {
+			return logTimestamp.plus(getEndMicroSecs() * loops, ChronoUnit.MICROS);
+		}
 	}
+
 }
