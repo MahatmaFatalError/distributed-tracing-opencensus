@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +25,7 @@ public class HelloService {
 	private static final Logger log = LoggerFactory.getLogger(HelloService.class);
 
 	@Autowired
+	@Lazy
 	JdbcTemplate template;
 
 	private static final Logger LOG = LoggerFactory.getLogger(HelloService.class);
@@ -39,7 +41,7 @@ public class HelloService {
 		List<Map<String, Object>> result = template.queryForList(
 				"select d1.name, STRING_AGG(d1.SHORT_DESCRIPTION, ',' order by age(d1.LAST_UPDATED, d1.CREATED)) from DOCUMENT_TEMPLATE d1 inner join DOCUMENT_TEMPLATE d2 on d1.id = d2.id where d1.author = ? OR d1.author = ? group by d1.name having count(*) > ? order by d1.name",
 				"Jimmy", "Jessica" , 1000);
-		
+
 		String name = (String) result.get(0).get("name");
 		span.addAnnotation(name);
 		helloStr += name;

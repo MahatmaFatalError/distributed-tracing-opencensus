@@ -12,18 +12,19 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<maven.compiler.source>1.8</maven.compiler.source>
 		<maven.compiler.target>1.8</maven.compiler.target>
-		<spring-boot.version>2.0.3.RELEASE</spring-boot.version>
+		<spring-boot.version>2.1.6.RELEASE</spring-boot.version>
 		<io-opencensus.version>0.23.0</io-opencensus.version>
 		<junit.version>4.12</junit.version>
 		<skip.intTest>true</skip.intTest>
+		<datasource-proxy.version>1.5.1</datasource-proxy.version>
 	</properties>
 
 	<dependencies>
-<!-- 		<dependency> -->
-<!-- 			<groupId>org.springframework.boot</groupId> -->
-<!-- 			<artifactId>spring-boot-devtools</artifactId> -->
-<!-- 			<version>${spring-boot.version}</version> -->
-<!-- 		</dependency> -->
+		<!-- <dependency> -->
+		<!-- <groupId>org.springframework.boot</groupId> -->
+		<!-- <artifactId>spring-boot-devtools</artifactId> -->
+		<!-- <version>${spring-boot.version}</version> -->
+		<!-- </dependency> -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-web</artifactId>
@@ -91,6 +92,12 @@
 		<!-- <artifactId>HikariCP</artifactId> -->
 		<!-- <version>3.3.2-OPENCENSUS</version> -->
 		<!-- </dependency> -->
+
+		<dependency>
+			<groupId>net.ttddyy</groupId>
+			<artifactId>datasource-proxy</artifactId>
+			<version>${datasource-proxy.version}</version>
+		</dependency>
 
 		<dependency>
 			<groupId>junit</groupId>

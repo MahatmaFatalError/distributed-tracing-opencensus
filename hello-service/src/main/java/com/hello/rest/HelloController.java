@@ -2,6 +2,7 @@ package com.hello.rest;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +24,7 @@ public class HelloController {
 	private final HelloService helloService;
 
 	@Autowired
+	@Lazy
 	JdbcTemplate template;
 
 	@Autowired

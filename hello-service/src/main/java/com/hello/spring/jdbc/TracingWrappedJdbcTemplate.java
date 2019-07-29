@@ -2,7 +2,6 @@ package com.hello.spring.jdbc;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
@@ -12,8 +11,6 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.ParameterDisposer;
 import org.springframework.jdbc.core.PreparedStatementCallback;
 import org.springframework.jdbc.core.PreparedStatementCreator;
-import org.springframework.jdbc.core.PreparedStatementSetter;
-import org.springframework.jdbc.core.ResultSetExtractor;
 import org.springframework.jdbc.core.SqlProvider;
 import org.springframework.jdbc.core.StatementCallback;
 import org.springframework.jdbc.datasource.DataSourceUtils;
@@ -23,7 +20,6 @@ import org.springframework.util.Assert;
 
 import io.opencensus.common.Scope;
 import io.opencensus.trace.Span;
-import io.opencensus.trace.SpanContext;
 import io.opencensus.trace.Tracer;
 import io.opencensus.trace.Tracing;
 import io.opencensus.trace.samplers.Samplers;
@@ -52,32 +48,6 @@ public class TracingWrappedJdbcTemplate extends org.springframework.jdbc.core.Jd
 	public TracingWrappedJdbcTemplate(DataSource dataSource) {
 		super(dataSource);
 	}
-	
-	
-	@Override
-	public void execute(final String sql) throws DataAccessException {
-		if (logger.isDebugEnabled()) {
-			logger.debug("Executing SQL statement [" + sql + "]");
-		}
-		
-		SpanContext context = tracer.getCurrentSpan().getContext();
-		String traceSQL = String.format("-- %s \n %s", context.toString(), sql);
-
-		class ExecuteStatementCallback implements StatementCallback<Object>, SqlProvider {
-			@Override
-			@Nullable
-			public Object doInStatement(Statement stmt) throws SQLException {
-				stmt.execute(traceSQL);
-				return null;
-			}
-			@Override
-			public String getSql() {
-				return traceSQL;
-			}
-		}
-
-		execute(new ExecuteStatementCallback());
-	}
 
 	// -------------------------------------------------------------------------
 	// Methods dealing with prepared statements
@@ -96,14 +66,13 @@ public class TracingWrappedJdbcTemplate extends org.springframework.jdbc.core.Jd
 
 		Connection con = getTracedConnection();
 
-		Span span2 = tracer.spanBuilder("execute statement").setRecordEvents(true).setSampler(Samplers.alwaysSample())
-				.startSpan();
+		Span queryExecSpan = tracer.spanBuilder("execute statement").setRecordEvents(true).setSampler(Samplers.alwaysSample()).startSpan();
 
 		PreparedStatement ps = null;
-		try (Scope ws = tracer.withSpan(span2)) {
+		try (Scope ws = tracer.withSpan(queryExecSpan)) {
 			ps = psc.createPreparedStatement(con);
 			applyStatementSettings(ps);
-			span2.addAnnotation("Statement:" + ps.toString());
+			queryExecSpan.addAnnotation("Statement:" + ps.toString());
 			T result = action.doInPreparedStatement(ps);
 			handleWarnings(ps);
 			return result;
@@ -125,7 +94,7 @@ public class TracingWrappedJdbcTemplate extends org.springframework.jdbc.core.Jd
 			}
 			JdbcUtils.closeStatement(ps);
 			DataSourceUtils.releaseConnection(con, getDataSource());
-			span2.end();
+			queryExecSpan.end();
 		}
 	}
 
@@ -134,19 +103,14 @@ public class TracingWrappedJdbcTemplate extends org.springframework.jdbc.core.Jd
 	public <T> T execute(StatementCallback<T> action) throws DataAccessException {
 		Assert.notNull(action, "Callback object must not be null");
 
-		// init trace context
-		Span span = tracer.spanBuilder("acquiring db connection from pool").setRecordEvents(true)
-				.setSampler(Samplers.alwaysSample()).startSpan();
-
 		Connection con = getTracedConnection();
 
-		Span span2 = tracer.spanBuilder("execute statement").setRecordEvents(true).setSampler(Samplers.alwaysSample())
-				.startSpan();
+		Span queryExecSpan = tracer.spanBuilder("execute statement").setRecordEvents(true).setSampler(Samplers.alwaysSample()).startSpan();
 		Statement stmt = null;
-		try (Scope ws = tracer.withSpan(span2)) {
+		try (Scope ws = tracer.withSpan(queryExecSpan)) {
 			stmt = con.createStatement();
 			applyStatementSettings(stmt);
-			span2.addAnnotation("Statement:" + stmt.toString());
+			queryExecSpan.addAnnotation("Statement:" + stmt.toString());
 			T result = action.doInStatement(stmt);
 			handleWarnings(stmt);
 			return result;
@@ -162,7 +126,7 @@ public class TracingWrappedJdbcTemplate extends org.springframework.jdbc.core.Jd
 		} finally {
 			JdbcUtils.closeStatement(stmt);
 			DataSourceUtils.releaseConnection(con, getDataSource());
-			span2.end();
+			queryExecSpan.end();
 		}
 	}
 
@@ -184,8 +148,8 @@ public class TracingWrappedJdbcTemplate extends org.springframework.jdbc.core.Jd
 
 	private Connection getTracedConnection() {
 		// init trace context
-		Span span = tracer.spanBuilder("acquiring db connection from pool").setRecordEvents(true)
-				.setSampler(Samplers.alwaysSample()).startSpan();
+		Span span = tracer.spanBuilder("acquiring db connection from pool").setRecordEvents(true).setSampler(Samplers.alwaysSample())
+				.startSpan();
 
 		Connection con;
 		try (Scope ws = tracer.withSpan(span)) {
@@ -194,74 +158,6 @@ public class TracingWrappedJdbcTemplate extends org.springframework.jdbc.core.Jd
 			span.end();
 		}
 		return con;
-	}
-
-	@Override
-	@Nullable
-	public <T> T query(final String sql, final ResultSetExtractor<T> rse) throws DataAccessException {
-		Assert.notNull(sql, "SQL must not be null");
-		Assert.notNull(rse, "ResultSetExtractor must not be null");
-		if (logger.isDebugEnabled()) {
-			logger.debug("Executing SQL query [" + sql + "]");
-		}
-
-		SpanContext context = tracer.getCurrentSpan().getContext();
-		String traceSQL = String.format("-- %s \n %s", context.toString(), sql);
-
-		class QueryStatementCallback implements StatementCallback<T>, SqlProvider {
-			@Override
-			@Nullable
-			public T doInStatement(Statement stmt) throws SQLException {
-				ResultSet rs = null;
-				try {
-					rs = stmt.executeQuery(traceSQL);
-					return rse.extractData(rs);
-				} finally {
-					JdbcUtils.closeResultSet(rs);
-				}
-			}
-
-			@Override
-			public String getSql() {
-				return sql;
-			}
-		}
-
-		return execute(new QueryStatementCallback());
-	}
-
-	@Override
-	@Nullable
-	public <T> T query(String sql, @Nullable PreparedStatementSetter pss, ResultSetExtractor<T> rse)
-			throws DataAccessException {
-		return query(new SimplePreparedStatementCreator(sql), pss, rse);
-	}
-
-	/**
-	 * Simple adapter for PreparedStatementCreator, allowing to use a plain SQL
-	 * statement.
-	 */
-	private static class SimplePreparedStatementCreator implements PreparedStatementCreator, SqlProvider {
-
-		private final String sql;
-
-		public SimplePreparedStatementCreator(String sql) {
-			Assert.notNull(sql, "SQL must not be null");
-			SpanContext context = tracer.getCurrentSpan().getContext();
-			String traceSQL = String.format("-- %s \n %s", context.toString(), sql);
-
-			this.sql = traceSQL;
-		}
-
-		@Override
-		public PreparedStatement createPreparedStatement(Connection con) throws SQLException {
-			return con.prepareStatement(this.sql);
-		}
-
-		@Override
-		public String getSql() {
-			return this.sql;
-		}
 	}
 
 }

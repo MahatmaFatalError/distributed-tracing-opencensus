@@ -13,9 +13,6 @@ import com.hello.spring.jdbc.TracingWrappedJdbcTemplate;
 @Configuration
 public class TracingConfiguration {
 
-	@Autowired
-	DataSource ds;
-
 	@Bean
 	public FilterRegistrationBean tracingFilter() {
 		FilterRegistrationBean registrationBean = new FilterRegistrationBean();
@@ -25,7 +22,9 @@ public class TracingConfiguration {
 	}
 
 	@Bean
-	public JdbcTemplate getJdbcTemplate() {
+	public JdbcTemplate getJdbcTemplate(DataSource ds) {
 		return new TracingWrappedJdbcTemplate(ds);
 	}
+
+
 }
