@@ -18,8 +18,8 @@ import io.opencensus.trace.samplers.Samplers;
 public class ConnectionPoolTracingAspect {
 	private static final Logger LOG = LoggerFactory.getLogger(ConnectionPoolTracingAspect.class);
 
-	@Around("execution(static java.sql.Connection org.springframework.jdbc.datasource.DataSourceUtils.getConnection(..))")
-	public Object getNameAdvice(ProceedingJoinPoint proceedingJoinPoint) {
+	@Around("execution(public static java.sql.Connection org.springframework.jdbc.datasource.DataSourceUtils.getConnection(..))")
+	public Object getConnectionTracingAdvice(ProceedingJoinPoint proceedingJoinPoint) {
 
 		Tracer tracer = Tracing.getTracer();
 		Span span = tracer.spanBuilder("acquiring db connection from pool").setRecordEvents(true).setSampler(Samplers.alwaysSample())
