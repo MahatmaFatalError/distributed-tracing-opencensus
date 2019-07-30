@@ -17,6 +17,7 @@
 		<junit.version>4.12</junit.version>
 		<skip.intTest>true</skip.intTest>
 		<datasource-proxy.version>1.5.1</datasource-proxy.version>
+		<aspectj.version>1.9.4</aspectj.version>
 	</properties>
 
 	<dependencies>
@@ -29,6 +30,12 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-web</artifactId>
 			<version>${spring-boot.version}</version>
+			<exclusions>
+				<exclusion>
+					<groupId>javax.validation</groupId>
+					<artifactId>validation-api</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 
 		<dependency>
@@ -59,6 +66,35 @@
 			<artifactId>opencensus-impl-core</artifactId>
 			<version>${io-opencensus.version}</version>
 		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-aop</artifactId>
+			<version>${spring-boot.version}</version>
+		</dependency>
+
+		<!-- AspectJ dependencies -->
+		<dependency>
+			<groupId>org.aspectj</groupId>
+			<artifactId>aspectjrt</artifactId>
+			<version>${aspectj.version}</version>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.aspectj</groupId>
+			<artifactId>aspectjtools</artifactId>
+			<version>${aspectj.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-instrument</artifactId>
+			<version>5.1.8.RELEASE</version>
+		</dependency>
+
+		<!-- <dependency> <groupId>com.jcabi</groupId> <artifactId>jcabi-aspects</artifactId>
+			<version>0.22.6</version> <exclusions> <exclusion> <groupId>javax.validation</groupId>
+			<artifactId>validation-api</artifactId> </exclusion> </exclusions> </dependency> -->
 
 
 		<!-- Database -->
@@ -134,6 +170,22 @@
 					<tag>${project.version}</tag>
 				</configuration>
 			</plugin>
+
+			<!-- Aspect Weaving -->
+			<!-- <plugin> <groupId>com.jcabi</groupId> <artifactId>jcabi-maven-plugin</artifactId>
+				<version>0.8</version> <executions> <execution> <goals> <goal>ajc</goal>
+				</goals> </execution> </executions> </plugin> -->
 		</plugins>
+
+		<!-- <pluginManagement> <plugins> This plugin's configuration is used to
+			store Eclipse m2e settings only. It has no influence on the Maven build itself.
+			<plugin> <groupId>org.eclipse.m2e</groupId> <artifactId>lifecycle-mapping</artifactId>
+			<version>1.0.0</version> <configuration> <lifecycleMappingMetadata> <pluginExecutions>
+			<pluginExecution> <pluginExecutionFilter> <groupId>com.jcabi</groupId> <artifactId>jcabi-maven-plugin</artifactId>
+			<versionRange>[0.0,)</versionRange> <goals> <goal>ajc</goal> </goals> </pluginExecutionFilter>
+			<action> <execute /> </action> </pluginExecution> </pluginExecutions> </lifecycleMappingMetadata>
+			</configuration> </plugin> </plugins> </pluginManagement> -->
 	</build>
+
+
 </project>
