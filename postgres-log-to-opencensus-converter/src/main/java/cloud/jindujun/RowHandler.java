@@ -1,6 +1,5 @@
 package cloud.jindujun;
 
-import static cloud.jindujun.SpanUtils.*;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -230,9 +229,9 @@ public class RowHandler {
 //		}
 //	}
 
-	private void collectSpansFromExecPlanPreOrder(ExecPlan plan, Span parentSpan, ZonedDateTime timestamp) {
-		ZonedDateTime startTimestamp = plan.getStart(timestamp);
-		ZonedDateTime endTimestamp = plan.getEnd(timestamp);
+	private void collectSpansFromExecPlanPreOrder(ExecPlan plan, Span parentSpan, ZonedDateTime initialStartTimestamp) {
+		ZonedDateTime startTimestamp = plan.getStart(initialStartTimestamp);
+		ZonedDateTime endTimestamp = plan.getEnd(initialStartTimestamp);
 
 		LOG.info("startTimestamp	: " + startTimestamp + " of node " + plan.getNodeType());
 		LOG.info("endTimestamp	: " + endTimestamp + " of node " + plan.getNodeType());
@@ -253,7 +252,7 @@ public class RowHandler {
 		// LOG.info("Span started with trace Id:" + span.getContext().getTraceId() + " and node " + plan.getNodeType());
 
 		for (ExecPlan subPlan : plan.getPlans()) {
-			collectSpansFromExecPlanPreOrder(subPlan, span, timestamp);
+			collectSpansFromExecPlanPreOrder(subPlan, span, initialStartTimestamp);
 		}
 		closeSpan(span, endTimestamp);
 

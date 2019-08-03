@@ -13,12 +13,12 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  */
 @SpringBootApplication
 //@EnableScheduling
-public class PostgresLogToOpencensusConverterApplication implements CommandLineRunner {
+public class PostgresLogToOpenTracingConverterApplication implements CommandLineRunner {
 
-	private static Logger LOG = LoggerFactory.getLogger(PostgresLogToOpencensusConverterApplication.class);
+	private static Logger LOG = LoggerFactory.getLogger(PostgresLogToOpenTracingConverterApplication.class);
 
 	public static void main(String[] args) {
-		SpringApplication.run(PostgresLogToOpencensusConverterApplication.class, args);
+		SpringApplication.run(PostgresLogToOpenTracingConverterApplication.class, args);
 
 	}
 
