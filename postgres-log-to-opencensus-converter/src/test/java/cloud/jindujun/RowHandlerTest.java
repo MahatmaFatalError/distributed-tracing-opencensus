@@ -13,7 +13,7 @@ import org.springframework.util.ResourceUtils;
 
 public class RowHandlerTest {
 
-	private RowHandler rowHandler = new RowHandler(false);
+	private RowHandler rowHandler = new RowHandler(true,true,false);
 
 	private DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS z", Locale.ENGLISH);
 

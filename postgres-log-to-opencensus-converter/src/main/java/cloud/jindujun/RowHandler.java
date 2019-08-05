@@ -1,6 +1,5 @@
 package cloud.jindujun;
 
-
 import java.io.IOException;
 import java.time.Duration;
 import java.time.ZoneId;
@@ -37,9 +36,15 @@ public class RowHandler {
 	private int LOCK_OFFSET_SEC = 1;
 
 	private boolean convertHierarchicalSpans;
+	private boolean convertExecPlans;
+	private boolean convertLocks;
 
-	public RowHandler(@Value("${tracing.convertHierarchicalSpans}") boolean convertHierarchicalSpans) {
+	public RowHandler(@Value("${tracing.features.locks}") boolean convertLocks,
+			@Value("${tracing.features.execplans}") boolean convertExecPlans,
+			@Value("${tracing.features.convertHierarchicalSpans}") boolean convertHierarchicalSpans) {
 		this.convertHierarchicalSpans = convertHierarchicalSpans;
+		this.convertExecPlans = convertExecPlans;
+		this.convertLocks = convertLocks;
 	}
 
 	private class TimestampTuple {
@@ -107,16 +112,15 @@ public class RowHandler {
 		if (message != null) {
 			if (message.contains("-- SpanContext{traceId=TraceId{traceId=")) {
 
-				if (!message.contains("plan:") && !message.contains("still waiting for") && !message.contains(" acquired ")) {
+				if (convertLocks && !message.contains("plan:") && !message.contains("still waiting for") && !message.contains(" acquired ")) {
 					createLockSpan(message, timestamp, pid);
 				}
-
 
 				if (message.startsWith("execute ") && "SELECT".equals(command)) {
 					pidEffectiveStartMapping.put(pid, timestamp);
 				}
 
-				if (message.contains("plan:") && ("BIND".equals(command) || "SELECT".equals(command))) {
+				if (convertExecPlans && message.contains("plan:") && ("BIND".equals(command) || "SELECT".equals(command))) {
 					handleExecPlanMessage(message, pid);
 				}
 			}
@@ -308,7 +312,7 @@ public class RowHandler {
 
 		JaegerSpanContext spanContext = traceContextLoader.loadSpanContext(message);
 
-		Map<String, TimestampTuple> relationTsTupleMap = gatheredTimeSpans.get(pid);
+		Map<String, TimestampTuple> relationTsTupleMap = gatheredTimeSpans.remove(pid);
 		if (relationTsTupleMap != null) {
 
 			pidTraceMapping.put(pid, spanContext.getTraceId());
