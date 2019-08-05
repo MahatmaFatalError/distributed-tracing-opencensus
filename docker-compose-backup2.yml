@@ -55,29 +55,6 @@ services:
     links:
       - els
 
-  hello-service:
-    build: ./hello-service
-    ports:
-      - "8888:8888"
-    environment:
-      JAEGER_HOST: jaeger
-      PG_HOST: db-postgres
-    links:
-      - jaeger
-      - db-postgres
-
-  greetings-service:
-    build: ./greetings-service
-    ports:
-      - "8080:8080"
-    environment:
-      HELLO_SERVICE_HOST: hello-service
-      JAEGER_HOST: jaeger
-      PG_HOST: db-postgres
-    links:
-       - hello-service
-       - jaeger
-       - db-postgres
 
   db-postgres:
     image: "postgres:11.3"
