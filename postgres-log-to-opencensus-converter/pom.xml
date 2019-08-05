@@ -44,7 +44,7 @@
 
 		<dependency>
 			<groupId>org.jooq</groupId>
- 			<artifactId>joor</artifactId> <!--joor-java-8 -->
+ 			<artifactId>joor-java-8</artifactId> <!--joor-java-8 -->
 			<version>0.9.12</version>
 		</dependency>
 

@@ -116,7 +116,7 @@ public class RowHandler {
 					pidEffectiveStartMapping.put(pid, timestamp);
 				}
 
-				if (message.contains("plan:") && "SELECT".equals(command)) {
+				if (message.contains("plan:") && ("BIND".equals(command) || "SELECT".equals(command))) {
 					handleExecPlanMessage(message, pid);
 				}
 			}
@@ -261,6 +261,7 @@ public class RowHandler {
 	private void closeSpan(JaegerSpan span, ZonedDateTime endTimestamp) {
 		long finishMicros = TimeUnit.MILLISECONDS.toMicros(endTimestamp.toInstant().toEpochMilli());
 		span.finish(finishMicros);
+		LOG.info("Closing Span {}", span.toString());
 	}
 
 	/**
