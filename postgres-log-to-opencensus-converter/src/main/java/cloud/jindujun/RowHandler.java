@@ -2,8 +2,11 @@ package cloud.jindujun;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
@@ -188,7 +191,7 @@ public class RowHandler {
 
 	private JaegerSpan startSpan(SpanContext spanContext, ZonedDateTime startTimestamp, String operationName) {
 		JaegerSpan span = (JaegerSpan) tracer.buildSpan(operationName).asChildOf(spanContext).start();
-		long startMicros = TimeUnit.MILLISECONDS.toMicros(startTimestamp.toInstant().toEpochMilli());
+		long startMicros = ChronoUnit.MICROS.between(Instant.EPOCH, startTimestamp.toInstant());//TimeUnit.MILLISECONDS.toMicros(startTimestamp.toInstant().toEpochMilli());
 		Reflect.on(span).set("startTimeMicroseconds", startMicros);
 		return span;
 	}
@@ -248,9 +251,9 @@ public class RowHandler {
 			return;
 		}
 
-		// SpanBuilder spanBuilder = tracer.spanBuilder(plan.getNodeType());
 		JaegerSpan span = (JaegerSpan) tracer.buildSpan(plan.getNodeType()).asChildOf(parentSpan).start();
-		long startMicros = TimeUnit.MILLISECONDS.toMicros(startTimestamp.toInstant().toEpochMilli());
+		long startMicros = ChronoUnit.MICROS.between(Instant.EPOCH, startTimestamp.toInstant());
+				//TimeUnit.MILLISECONDS.toMicros(startTimestamp.toInstant().toEpochMilli());
 		Reflect.on(span).set("startTimeMicroseconds", startMicros);
 
 		// LOG.info("Span started with trace Id:" + span.getContext().getTraceId() + " and node " + plan.getNodeType());
@@ -263,9 +266,12 @@ public class RowHandler {
 	}
 
 	private void closeSpan(JaegerSpan span, ZonedDateTime endTimestamp) {
-		long finishMicros = TimeUnit.MILLISECONDS.toMicros(endTimestamp.toInstant().toEpochMilli());
+		long finishMicros = ChronoUnit.MICROS.between(Instant.EPOCH, endTimestamp.toInstant());//TimeUnit.MILLISECONDS.toMicros(endTimestamp.toInstant().toEpochMilli());
 		span.finish(finishMicros);
-		LOG.info("Closing Span {}", span.toString());
+		LocalDateTime startTimestamp = LocalDateTime.ofInstant(Instant.ofEpochMilli(TimeUnit.MICROSECONDS.toMillis(span.getStart())),ZoneId.systemDefault());
+		LocalDateTime endingTimestamp = LocalDateTime.ofInstant(Instant.ofEpochMilli(TimeUnit.MICROSECONDS.toMillis(span.getStart()+span.getDuration())),ZoneId.systemDefault());
+		
+		LOG.info("Closing Span {}, starting on {} with duration {}ms ending on {} ", span, startTimestamp, span.getDuration(), endingTimestamp);
 	}
 
 	/**
