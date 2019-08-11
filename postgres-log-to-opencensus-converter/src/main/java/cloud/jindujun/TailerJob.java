@@ -38,7 +38,7 @@ public class TailerJob extends QuartzJobBean {
 		logger.info("Job ** {} ** fired @ {}", context.getJobDetail().getKey().getName(), context.getFireTime());
 
 		List<Map<String, Object>> result = template.queryForList(
-				"select log_time, process_id, session_id, command_tag, virtual_transaction_id, message, detail, application_name from pglog_last_min order by log_time");
+				"select log_time, process_id, session_id, command_tag, virtual_transaction_id, message, detail, query, application_name from pglog_last_min order by log_time asc");
 
 		for (Map<String, Object> row : result) {
 			rowHandler.handleRow(row);

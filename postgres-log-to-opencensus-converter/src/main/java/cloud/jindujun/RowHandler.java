@@ -8,6 +8,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalUnit;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -38,7 +39,7 @@ import io.opentracing.Tracer;
 @Component
 public class RowHandler {
 
-	private int LOCK_OFFSET_SEC = 1;
+	private int LOCK_OFFSET_MILLISEC = 250;
 
 	private boolean convertHierarchicalSpans;
 	private boolean convertExecPlans;
@@ -84,9 +85,9 @@ public class RowHandler {
 	Map<Integer, String> pidTraceMapping = new HashMap<>();
 
 	/*
-	 * Map<pid,start date of first SELECT>
+	 * Map<pid,Map<SpanId,start date of first SELECT>>
 	 */
-	Map<Integer, ZonedDateTime> pidEffectiveStartMapping = new HashMap<>();
+	Map<Integer, Map<String, ZonedDateTime>> pidEffectiveStartMapping = new HashMap<>();
 
 	/*
 	 * Map<pid, Map<TableId,TimestampTuple>>
@@ -102,33 +103,50 @@ public class RowHandler {
 	private Map<Integer, ZonedDateTime> waitingPids = new HashMap<>();
 
 	private static Pattern relationPattern = Pattern.compile(".*on relation (.*) of database.*");
+	private static Pattern relationPatternWithLock = Pattern.compile(".*acquired (.*) on relation (.*) of database.*");
+	private static Pattern spanIdPattern = Pattern.compile(".*spanId=(.*)},.*");
+
+	private static Pattern durationPattern = Pattern.compile("duration: (.*) ms.*");
 
 	public void handleRow(Map<String, Object> row) {
 		String message = (String) row.get("message");
 		java.sql.Timestamp sqlTimestamp = (java.sql.Timestamp) row.get("log_time");
 		Integer pid = (Integer) row.get("process_id");
 		String command = (String) row.get("command_tag");
+		String query = (String) row.get("query");
+
 		String printMessage = message.length() > 500 ? message.substring(0, 500) + "..." : message;
 
-		LOG.info("Timestamp: " + sqlTimestamp.toString() + " Message: " + printMessage);
+		LOG.info("HandleRow: {} ", row);
+		// LOG.info("HandleRow: Timestamp: {} Message: {} ", sqlTimestamp.toString() , printMessage);
 
 		ZonedDateTime timestamp = ZonedDateTime.ofInstant(sqlTimestamp.toInstant(), ZoneId.systemDefault());
-		convert(message, timestamp, pid, command);
+		convert(message, timestamp, pid, command, query);
 	}
 
-	public void convert(String message, ZonedDateTime timestamp, Integer pid, String command) {
+	public void convert(String message, ZonedDateTime timestamp, Integer pid, String command, String query) {
 		if (message != null) {
 			if (message.contains("-- SpanContext{traceId=TraceId{traceId=")) {
 
 				if (convertLocks && !message.contains("plan:") && !message.contains("still waiting for") && !message.contains(" acquired ")) {
-					createLockSpan(message, timestamp, pid);
+					// createLockSpan(message, timestamp, pid, "lock");
 				}
 
 				if (message.startsWith("execute ") && "SELECT".equals(command)) {
-					pidEffectiveStartMapping.put(pid, timestamp);
+					LOG.info("Execute SELECT found for pid {}", pid);
+					int newLineIndex = message.indexOf('\n');
+					Matcher matcher = spanIdPattern.matcher(message.substring(0, newLineIndex));
+
+					if (matcher.matches()) {
+						String spanId = matcher.group(1);
+						HashMap<String, ZonedDateTime> spanToStartTimeMap = new HashMap<>();
+						spanToStartTimeMap.put(spanId, timestamp);
+						pidEffectiveStartMapping.put(pid, spanToStartTimeMap);
+					}
 				}
 
 				if (convertExecPlans && message.contains("plan:") && ("BIND".equals(command) || "SELECT".equals(command))) {
+					LOG.info("Exec Plan found for pid {}", pid);
 					handleExecPlanMessage(message, pid);
 				}
 			}
@@ -138,8 +156,7 @@ public class RowHandler {
 				Map<String, TimestampTuple> value = new HashMap<>();
 				TimestampTuple tsTuple = new TimestampTuple().setStartTs(timestamp);
 
-				Matcher matcher = relationPattern.matcher(message); // process 1169 still waiting for AccessShareLock on relation 16384 of
-																	// database 13067
+				Matcher matcher = relationPattern.matcher(message); // process 1169 still waiting for AccessShareLock on relation 16384 of database 13067
 
 				if (matcher.matches()) {
 					String relationId = matcher.group(1);
@@ -150,20 +167,22 @@ public class RowHandler {
 					waitingPids.put(pid, timestamp);
 				}
 
-			} else if (message.contains(" acquired ") && waitingPids.containsKey(pid)) { // process 1169 acquired AccessShareLock on
-																							// relation 16384 of database 13067 after
-																							// 3138.526 ms
+			} else if (message.contains(" acquired ") && waitingPids.containsKey(pid)) { // process 1169 acquired AccessShareLock on relation 16384 of database 13067 after 3138.526
+																							// ms
 				LOG.info("Lock acquired! Timestamp: " + timestamp + " Message: " + message);
+				waitingPids.remove(pid);
 				Map<String, TimestampTuple> relationTsTupleMap = gatheredTimeSpans.get(pid);
 
-				Matcher matcher = relationPattern.matcher(message); // process 1169 acquired AccessShareLock on relation 16384 of database
-																	// 13067 after 3138.526 ms
+				Matcher matcher = relationPatternWithLock.matcher(message); // process 1169 acquired AccessShareLock on relation 16384 of database 13067 after 3138.526 ms
 
 				if (matcher.matches()) {
-					String relationId = matcher.group(1);
-					TimestampTuple timestampTuple = relationTsTupleMap.get(relationId); // TODO_RELATION
+					String lockType = matcher.group(1);
+					String relationId = matcher.group(2);
+					TimestampTuple timestampTuple = relationTsTupleMap.get(relationId);
 					timestampTuple.setEndTs(timestamp);
 					relationTsTupleMap.put(relationId, timestampTuple);
+
+					createLockSpan(query, timestamp, pid, lockType);
 				}
 
 			}
@@ -173,12 +192,9 @@ public class RowHandler {
 	private void handleExecPlanMessage(String message, Integer pid) {
 		int newLineIndex = message.indexOf('\n');
 		String duration = message.substring(0, newLineIndex);
+		// LOG.info(" Duration: " + duration + " Message: " + message);
 
-		ZonedDateTime timestamp = pidEffectiveStartMapping.remove(pid); // timestamp von vorherigem, initialen log des statements holen
-
-		LOG.info("Timestamp: " + timestamp + " Duration: " + duration + " Message: " + message);
-		Pattern pattern = Pattern.compile("duration: (.*) ms.*");
-		Matcher matcher = pattern.matcher(duration);
+		Matcher matcher = durationPattern.matcher(duration);
 
 		if (matcher.matches()) {
 			String durationInMs = matcher.group(1);
@@ -190,18 +206,27 @@ public class RowHandler {
 				PlanEnvelop planWrapper = ExecPlanJsonParser.getInstance().parse(json);
 
 				SpanContext spanContext = traceContextLoader.loadSpanContext(message);
+				Map<String, ZonedDateTime> realSpanStart = pidEffectiveStartMapping.get(pid);
 
-				if (convertHierarchicalSpans) {
-					ZonedDateTime startTimestamp = timestamp;
-					ZonedDateTime endTimestamp = timestamp.plus(getEndMicroSecs(durationInMsDouble), ChronoUnit.MICROS); // NPE
+				matcher = spanIdPattern.matcher(message.replaceAll("\\r\\n|\\r|\\n", " "));
 
-					JaegerSpan span = startSpan(spanContext, startTimestamp, "execPlan");
+				if (matcher.matches()) {
+					String spanId = matcher.group(1);
 
-					collectSpansFromExecPlanPreOrder(planWrapper.getPlan(), span, timestamp);
+					ZonedDateTime timestamp = realSpanStart.remove(spanId); // timestamp von vorherigem, initialen log des statements holen
 
-					closeSpan(span, endTimestamp);
-				} else {
-					collectSpansFromExecPlan(planWrapper.getPlan(), spanContext, timestamp);
+					if (convertHierarchicalSpans) {
+						ZonedDateTime startTimestamp = timestamp;
+						ZonedDateTime endTimestamp = timestamp.plus(getEndMicroSecs(durationInMsDouble), ChronoUnit.MICROS); // NPE timestamp is null
+
+						JaegerSpan span = startSpan(spanContext, startTimestamp, "execPlan");
+
+						collectSpansFromExecPlanPreOrder(planWrapper.getPlan(), span, timestamp);
+
+						closeSpan(span, endTimestamp);
+					} else {
+						collectSpansFromExecPlan(planWrapper.getPlan(), spanContext, timestamp);
+					}
 				}
 
 			} catch (IOException e) {
@@ -335,25 +360,22 @@ public class RowHandler {
 
 	}
 
-	private void createLockSpan(String message, ZonedDateTime timestamp, Integer pid) {
+	private void createLockSpan(String message, ZonedDateTime timestamp, Integer pid, String lockType) {
 
 		JaegerSpanContext spanContext = traceContextLoader.loadSpanContext(message);
 
 		Map<String, TimestampTuple> relationTsTupleMap = gatheredTimeSpans.remove(pid);
 		if (relationTsTupleMap != null) {
 
-			pidTraceMapping.put(pid, spanContext.getTraceId()); // ???
-
-			// TimestampTuple timestampTuple = relationTsTupleMap.remove("TODO_RELATION"); //TODO: can only handle single lock and single
-			// table...
+			// pidTraceMapping.put(pid, spanContext.getTraceId()); // ???
 
 			Optional<Entry<String, TimestampTuple>> searchresult = relationTsTupleMap.entrySet().stream().findFirst();
 
 			if (searchresult.isPresent()) {
 				TimestampTuple timestampTuple = relationTsTupleMap.remove(searchresult.get().getKey());
 				if (timestampTuple.getStartTs() != null && timestampTuple.getEndTs() != null) {
-					ZonedDateTime startTs = timestampTuple.getStartTs().minusSeconds(LOCK_OFFSET_SEC);
-					JaegerSpan span = startSpan(spanContext, startTs, "wait for lock");
+					ZonedDateTime startTs = timestampTuple.getStartTs().minus(LOCK_OFFSET_MILLISEC, ChronoUnit.MILLIS);
+					JaegerSpan span = startSpan(spanContext, startTs, "wait for " + lockType);
 					span.setTag("sql", message);
 
 					ZonedDateTime endTs = timestampTuple.getEndTs();
