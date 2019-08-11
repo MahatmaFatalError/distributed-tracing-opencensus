@@ -10,6 +10,8 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -42,8 +44,7 @@ public class RowHandler {
 	private boolean convertExecPlans;
 	private boolean convertLocks;
 
-	public RowHandler(@Value("${tracing.features.locks}") boolean convertLocks,
-			@Value("${tracing.features.execplans}") boolean convertExecPlans,
+	public RowHandler(@Value("${tracing.features.locks}") boolean convertLocks, @Value("${tracing.features.execplans}") boolean convertExecPlans,
 			@Value("${tracing.features.convertHierarchicalSpans}") boolean convertHierarchicalSpans) {
 		this.convertHierarchicalSpans = convertHierarchicalSpans;
 		this.convertExecPlans = convertExecPlans;
@@ -100,12 +101,16 @@ public class RowHandler {
 
 	private Map<Integer, ZonedDateTime> waitingPids = new HashMap<>();
 
+	private static Pattern relationPattern = Pattern.compile(".*on relation (.*) of database.*");
+
 	public void handleRow(Map<String, Object> row) {
 		String message = (String) row.get("message");
 		java.sql.Timestamp sqlTimestamp = (java.sql.Timestamp) row.get("log_time");
 		Integer pid = (Integer) row.get("process_id");
 		String command = (String) row.get("command_tag");
-		LOG.info("Timestamp: " + sqlTimestamp.toString() + " Message: " + message);
+		String printMessage = message.length() > 500 ? message.substring(0, 500) + "..." : message;
+
+		LOG.info("Timestamp: " + sqlTimestamp.toString() + " Message: " + printMessage);
 
 		ZonedDateTime timestamp = ZonedDateTime.ofInstant(sqlTimestamp.toInstant(), ZoneId.systemDefault());
 		convert(message, timestamp, pid, command);
@@ -129,21 +134,37 @@ public class RowHandler {
 			}
 
 			if (message.contains("still waiting for")) {
-				LOG.info("Timestamp: " + timestamp + " Message: " + message);
+				LOG.info("still waiting for Lock! Timestamp: " + timestamp + " Message: " + message);
 				Map<String, TimestampTuple> value = new HashMap<>();
 				TimestampTuple tsTuple = new TimestampTuple().setStartTs(timestamp);
-				value.put("TODO_RELATION", tsTuple); // Eigenen Lock Context speichern
 
-				gatheredTimeSpans.put(pid, value);
+				Matcher matcher = relationPattern.matcher(message); // process 1169 still waiting for AccessShareLock on relation 16384 of
+																	// database 13067
 
-				waitingPids.put(pid, timestamp);
+				if (matcher.matches()) {
+					String relationId = matcher.group(1);
+					value.put(relationId, tsTuple); // "TODO_RELATION" Eigenen Lock Context speichern
 
-			} else if (message.contains(" acquired ") && waitingPids.containsKey(pid)) {
-				LOG.info("Timestamp: " + timestamp + " Message: " + message);
+					gatheredTimeSpans.put(pid, value);
+
+					waitingPids.put(pid, timestamp);
+				}
+
+			} else if (message.contains(" acquired ") && waitingPids.containsKey(pid)) { // process 1169 acquired AccessShareLock on
+																							// relation 16384 of database 13067 after
+																							// 3138.526 ms
+				LOG.info("Lock acquired! Timestamp: " + timestamp + " Message: " + message);
 				Map<String, TimestampTuple> relationTsTupleMap = gatheredTimeSpans.get(pid);
-				TimestampTuple timestampTuple = relationTsTupleMap.get("TODO_RELATION");
-				timestampTuple.setEndTs(timestamp);
-				relationTsTupleMap.put("TODO_RELATION", timestampTuple);
+
+				Matcher matcher = relationPattern.matcher(message); // process 1169 acquired AccessShareLock on relation 16384 of database
+																	// 13067 after 3138.526 ms
+
+				if (matcher.matches()) {
+					String relationId = matcher.group(1);
+					TimestampTuple timestampTuple = relationTsTupleMap.get(relationId); // TODO_RELATION
+					timestampTuple.setEndTs(timestamp);
+					relationTsTupleMap.put(relationId, timestampTuple);
+				}
 
 			}
 		}
@@ -172,7 +193,7 @@ public class RowHandler {
 
 				if (convertHierarchicalSpans) {
 					ZonedDateTime startTimestamp = timestamp;
-					ZonedDateTime endTimestamp = timestamp.plus(getEndMicroSecs(durationInMsDouble), ChronoUnit.MICROS);
+					ZonedDateTime endTimestamp = timestamp.plus(getEndMicroSecs(durationInMsDouble), ChronoUnit.MICROS); // NPE
 
 					JaegerSpan span = startSpan(spanContext, startTimestamp, "execPlan");
 
@@ -191,7 +212,7 @@ public class RowHandler {
 
 	private JaegerSpan startSpan(SpanContext spanContext, ZonedDateTime startTimestamp, String operationName) {
 		JaegerSpan span = (JaegerSpan) tracer.buildSpan(operationName).asChildOf(spanContext).start();
-		long startMicros = ChronoUnit.MICROS.between(Instant.EPOCH, startTimestamp.toInstant());//TimeUnit.MILLISECONDS.toMicros(startTimestamp.toInstant().toEpochMilli());
+		long startMicros = ChronoUnit.MICROS.between(Instant.EPOCH, startTimestamp.toInstant());// TimeUnit.MILLISECONDS.toMicros(startTimestamp.toInstant().toEpochMilli());
 		Reflect.on(span).set("startTimeMicroseconds", startMicros);
 		return span;
 	}
@@ -253,7 +274,7 @@ public class RowHandler {
 
 		JaegerSpan span = (JaegerSpan) tracer.buildSpan(plan.getNodeType()).asChildOf(parentSpan).start();
 		long startMicros = ChronoUnit.MICROS.between(Instant.EPOCH, startTimestamp.toInstant());
-				//TimeUnit.MILLISECONDS.toMicros(startTimestamp.toInstant().toEpochMilli());
+		// TimeUnit.MILLISECONDS.toMicros(startTimestamp.toInstant().toEpochMilli());
 		Reflect.on(span).set("startTimeMicroseconds", startMicros);
 
 		// LOG.info("Span started with trace Id:" + span.getContext().getTraceId() + " and node " + plan.getNodeType());
@@ -266,11 +287,11 @@ public class RowHandler {
 	}
 
 	private void closeSpan(JaegerSpan span, ZonedDateTime endTimestamp) {
-		long finishMicros = ChronoUnit.MICROS.between(Instant.EPOCH, endTimestamp.toInstant());//TimeUnit.MILLISECONDS.toMicros(endTimestamp.toInstant().toEpochMilli());
+		long finishMicros = ChronoUnit.MICROS.between(Instant.EPOCH, endTimestamp.toInstant());// TimeUnit.MILLISECONDS.toMicros(endTimestamp.toInstant().toEpochMilli());
 		span.finish(finishMicros);
-		LocalDateTime startTimestamp = LocalDateTime.ofInstant(Instant.ofEpochMilli(TimeUnit.MICROSECONDS.toMillis(span.getStart())),ZoneId.systemDefault());
-		LocalDateTime endingTimestamp = LocalDateTime.ofInstant(Instant.ofEpochMilli(TimeUnit.MICROSECONDS.toMillis(span.getStart()+span.getDuration())),ZoneId.systemDefault());
-		
+		LocalDateTime startTimestamp = LocalDateTime.ofInstant(Instant.ofEpochMilli(TimeUnit.MICROSECONDS.toMillis(span.getStart())), ZoneId.systemDefault());
+		LocalDateTime endingTimestamp = LocalDateTime.ofInstant(Instant.ofEpochMilli(TimeUnit.MICROSECONDS.toMillis(span.getStart() + span.getDuration())), ZoneId.systemDefault());
+
 		LOG.info("Closing Span {}, starting on {} with duration {}ms ending on {} ", span, startTimestamp, span.getDuration(), endingTimestamp);
 	}
 
@@ -321,15 +342,28 @@ public class RowHandler {
 		Map<String, TimestampTuple> relationTsTupleMap = gatheredTimeSpans.remove(pid);
 		if (relationTsTupleMap != null) {
 
-			pidTraceMapping.put(pid, spanContext.getTraceId());
+			pidTraceMapping.put(pid, spanContext.getTraceId()); // ???
 
-			TimestampTuple timestampTuple = relationTsTupleMap.get("TODO_RELATION");
-			ZonedDateTime startTs = timestampTuple.getStartTs().minusSeconds(LOCK_OFFSET_SEC);
-			JaegerSpan span = startSpan(spanContext, startTs, "wait for lock");
-			span.setTag("sql", message);
+			// TimestampTuple timestampTuple = relationTsTupleMap.remove("TODO_RELATION"); //TODO: can only handle single lock and single
+			// table...
 
-			ZonedDateTime endTs = timestampTuple.getEndTs();
-			closeSpan(span, endTs);
+			Optional<Entry<String, TimestampTuple>> searchresult = relationTsTupleMap.entrySet().stream().findFirst();
+
+			if (searchresult.isPresent()) {
+				TimestampTuple timestampTuple = relationTsTupleMap.remove(searchresult.get().getKey());
+				if (timestampTuple.getStartTs() != null && timestampTuple.getEndTs() != null) {
+					ZonedDateTime startTs = timestampTuple.getStartTs().minusSeconds(LOCK_OFFSET_SEC);
+					JaegerSpan span = startSpan(spanContext, startTs, "wait for lock");
+					span.setTag("sql", message);
+
+					ZonedDateTime endTs = timestampTuple.getEndTs();
+					closeSpan(span, endTs);
+
+				} else {
+					LOG.error("no lock ending found for message {} of process {}", message, pid);
+				}
+
+			}
 
 		}
 	}
