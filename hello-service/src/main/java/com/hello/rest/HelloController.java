@@ -3,9 +3,14 @@ package com.hello.rest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -66,5 +71,15 @@ public class HelloController {
 		}
 		span.end();
 
+	}
+
+	@RequestMapping(value = "/sleepquery", method = RequestMethod.GET)
+	@Transactional
+	public ResponseEntity<Void> execSleepQuery(@RequestParam(name = "duration", defaultValue = "400") Integer millis) {
+		double seconds =  millis.doubleValue() / 1000;
+
+		template.queryForMap("SELECT pg_sleep(?)", seconds);
+
+		return new ResponseEntity<Void>(HttpStatus.NO_CONTENT);
 	}
 }

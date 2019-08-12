@@ -1,5 +1,7 @@
 server:
   port: 8888
+  tomcat:
+    max-connections: 200
 
 tracing:
   jaegerUrl: http://${JAEGER_HOST}:14268/api/traces
@@ -10,4 +12,6 @@ spring:
     url: jdbc:postgresql://${PG_HOST}:5432/postgres
     username: postgres
     password: postgres
+    hikari:
+      maximum-pool-size: 2 # only for specials tests. disable for normal usage
 
