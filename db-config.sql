@@ -37,4 +37,78 @@ CREATE FOREIGN TABLE pglog (
 ) SERVER pglog
 OPTIONS ( filename '/var/lib/postgresql/data/pg_log/pglog.csv', format 'csv' );
 
-create view pglog_last_min as (SELECT * from pglog WHERE log_time > current_timestamp - interval '1 minutes')
+create view pglog_last_min as (SELECT * from pglog WHERE log_time > current_timestamp - interval '1 minutes');
+
+
+CREATE OR REPLACE TABLE public.spans (
+	id varchar NULL,
+	"index" varchar NULL,
+	score int NULL,
+	"type" varchar NOT NULL,
+	duration bigint NOT NULL,
+	flags integer NULL,
+	logs json NULL,
+	operationname varchar NULL,
+	processservicename varchar NULL,
+	processtags varchar NULL,
+	"references" json NULL,
+	spanid varchar NOT NULL,
+	starttime varchar NULL,
+	starttimemillis varchar NULL,
+	tags json NULL,
+	traceid varchar NOT NULL,
+	scenario varchar NULL SET DEFAULT false,
+	anomaly bool NULL,
+	CONSTRAINT spans_pk PRIMARY KEY (id),
+	CONSTRAINT spans_un UNIQUE (spanid)
+);
+
+CREATE OR REPLACE FUNCTION public.detect_outliers(IN scenarioName TEXT) RETURNS void
+	LANGUAGE sql
+AS $$
+
+		WITH raw_data AS (
+			SELECT operationname AS series,
+			       duration AS value
+			  FROM public.spans
+			WHERE scenario = scenarioName
+		),
+		details AS (
+			SELECT series,
+			       value,
+			       ROW_NUMBER() OVER (PARTITION BY series ORDER BY value) AS row_number,
+			       SUM(1) OVER (PARTITION BY series) AS total
+			  FROM raw_data
+		),
+		quartiles AS (
+			SELECT series,
+			       value,
+			       AVG(CASE WHEN row_number >= (FLOOR(total/2.0)/2.0)
+			                 AND row_number <= (FLOOR(total/2.0)/2.0) + 1
+			                THEN value/1.0 ELSE NULL END
+			          ) OVER (PARTITION BY series) AS q1,
+			       AVG(CASE WHEN row_number >= (total/2.0)
+			                 AND row_number <= (total/2.0) + 1
+			                THEN value/1.0 ELSE NULL END
+			          ) OVER (PARTITION BY series) AS median,
+			       AVG(CASE WHEN row_number >= (CEIL(total/2.0) + (FLOOR(total/2.0)/2.0))
+			                 AND row_number <= (CEIL(total/2.0) + (FLOOR(total/2.0)/2.0) + 1)
+			                THEN value/1.0 ELSE NULL END
+			          ) OVER (PARTITION BY series) AS q3
+			  FROM details
+		),
+		outlierthreshold as (SELECT series,
+		       q3 + ((q3-q1) * 3) as upper_outlier_threshold
+		  FROM quartiles
+		 GROUP BY series, upper_outlier_threshold
+		 )
+		 UPDATE public.spans set anomaly = true
+		 FROM outlierthreshold
+		 where spans.operationname = outlierthreshold.series and spans.duration > outlierthreshold.upper_outlier_threshold and spans.scenario = scenarioName
+		;
+
+
+$$
+;
+
+

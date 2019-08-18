@@ -148,15 +148,17 @@ public class TracingWrappedJdbcTemplate extends org.springframework.jdbc.core.Jd
 
 	private Connection getTracedConnection() {
 		// init trace context
-		Span span = tracer.spanBuilder("acquiring db connection from pool").setRecordEvents(true).setSampler(Samplers.alwaysSample()).startSpan();
+//		Span span = tracer.spanBuilder("acquiring db connection from pool").setRecordEvents(true).setSampler(Samplers.alwaysSample()).startSpan();
+//
+//		Connection con;
+//		try (Scope ws = tracer.withSpan(span)) {
+//			con = DataSourceUtils.getConnection(obtainDataSource()); // calls the underlying pool
+//		} finally {
+//			span.end();
+//		}
+//		return con;
 
-		Connection con;
-		try (Scope ws = tracer.withSpan(span)) {
-			con = DataSourceUtils.getConnection(obtainDataSource()); // calls the underlying pool
-		} finally {
-			span.end();
-		}
-		return con;
+		return DataSourceUtils.getConnection(obtainDataSource());
 	}
 
 }

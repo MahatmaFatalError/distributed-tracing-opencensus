@@ -19,5 +19,7 @@
 	<modules>
 		<module>greetings-service</module>
 		<module>hello-service</module>
+		<module>TraceAnomalyDetector</module>
+
 	</modules>
 </project>

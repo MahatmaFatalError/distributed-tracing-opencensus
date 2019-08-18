@@ -13,5 +13,5 @@ spring:
     username: postgres
     password: postgres
     hikari:
-      maximum-pool-size: 2 # only for specials tests. disable for normal usage
+      maximum-pool-size: 3 # only for specials tests. disable for normal usage
 

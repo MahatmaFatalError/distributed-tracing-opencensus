@@ -71,8 +71,6 @@ public class DatasourceProxyBeanPostProcessor implements BeanPostProcessor {
 		     	 } finally {
 		 			span.end();
 		 		 }
-
-
 			}
 			return invocation.proceed();
 		}
