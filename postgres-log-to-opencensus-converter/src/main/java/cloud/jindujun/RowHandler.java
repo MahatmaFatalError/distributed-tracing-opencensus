@@ -102,7 +102,7 @@ public class RowHandler {
 
 	private static Pattern relationPattern = Pattern.compile(".*on relation (.*) of database.*");
 	private static Pattern relationPatternWithLock = Pattern.compile(".*acquired (.*) on relation (.*) of database.*");
-	private static Pattern spanIdPattern = Pattern.compile(".*spanId=(.*)},.*");
+	private static Pattern spanIdPattern = Pattern.compile(".*spanId=(.*[A-Za-z0-9].)},.*");
 
 	private static Pattern durationPattern = Pattern.compile("duration: (.*) ms.*");
 
@@ -115,7 +115,7 @@ public class RowHandler {
 
 		String printMessage = message.length() > 500 ? message.substring(0, 500) + "..." : message;
 
-		LOG.info("HandleRow: {} ", row);
+//		LOG.info("HandleRow: {} ", row);
 		// LOG.info("HandleRow: Timestamp: {} Message: {} ", sqlTimestamp.toString() , printMessage);
 
 		ZonedDateTime timestamp = ZonedDateTime.ofInstant(sqlTimestamp.toInstant(), ZoneId.systemDefault());
@@ -206,7 +206,8 @@ public class RowHandler {
 				SpanContext spanContext = traceContextLoader.loadSpanContext(message);
 				Map<String, ZonedDateTime> realSpanStart = pidEffectiveStartMapping.get(pid);
 
-				matcher = spanIdPattern.matcher(message.replaceAll("\\r\\n|\\r|\\n", " "));
+				String condensed = message.replace("\n", "").replace("\r", "");
+				matcher = spanIdPattern.matcher(condensed);
 
 				if (matcher.matches()) {
 					String spanId = matcher.group(1);
@@ -215,6 +216,11 @@ public class RowHandler {
 
 					if (convertHierarchicalSpans) {
 						ZonedDateTime startTimestamp = timestamp;
+						if (timestamp == null) {
+							LOG.warn("Timestamp is null... abort");
+							return;
+						}
+
 						ZonedDateTime endTimestamp = timestamp.plus(getEndMicroSecs(durationInMsDouble), ChronoUnit.MICROS); // NPE timestamp is null
 
 						JaegerSpan span = startSpan(spanContext, startTimestamp, "execPlan");
