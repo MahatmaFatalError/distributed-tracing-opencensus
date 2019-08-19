@@ -1,10 +1,12 @@
 package com.hello.rest;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,8 @@ import io.opencensus.trace.Tracing;
 
 @RestController("/hello")
 public class HelloController {
+
+	private static final Logger log = LoggerFactory.getLogger(HelloController.class);
 	private static final Tracer tracer = Tracing.getTracer();
 
 	private final HelloService helloService;
@@ -37,23 +41,24 @@ public class HelloController {
 		this.helloService = helloService;
 	}
 
-	@GetMapping
+	@GetMapping("/hello")
 	public String getHello() {
-		Span span = SpanUtils.buildSpan(tracer, "HelloController getHello").startSpan();
-		String result;
-		try (Scope ws = tracer.withSpan(span)) {
-			result = helloService.printHello();
-		}
-		span.end();
-		return result;
+		return helloService.printHello();
 	}
 
+	@Cacheable("hello_cache")
+	@GetMapping("/hellocache")
+	public String getCachedHello() {
+		return helloService.printHello();
+	}
+
+	@CacheEvict(value = "hello_cache", allEntries = true)
 	@GetMapping(path = "/clearcache")
 	public void evictCache() {
 		Span span = SpanUtils.buildSpan(tracer, "HelloController clear Cache").startSpan();
 
 		try (Scope ws = tracer.withSpan(span)) {
-			helloService.evictCache();
+			log.info("cache evicted");
 		}
 		span.end();
 
@@ -76,7 +81,7 @@ public class HelloController {
 	@RequestMapping(value = "/sleepquery", method = RequestMethod.GET)
 	@Transactional
 	public ResponseEntity<Void> execSleepQuery(@RequestParam(name = "duration", defaultValue = "400") Integer millis) {
-		double seconds =  millis.doubleValue() / 1000;
+		double seconds = millis.doubleValue() / 1000;
 
 		template.queryForMap("SELECT pg_sleep(?)", seconds);
 

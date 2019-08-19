@@ -106,7 +106,21 @@ AS $$
 		 FROM outlierthreshold
 		 where spans.operationname = outlierthreshold.series and spans.duration > outlierthreshold.upper_outlier_threshold and spans.scenario = scenarioName
 		;
+$$
+;
 
+CREATE OR REPLACE FUNCTION public.detect_lock_outliers() RETURNS void
+	LANGUAGE sql
+AS $$
+	UPDATE public.spans set anomaly = true where spans.operationname = 'wait for Table Lock';
+
+$$
+;
+
+CREATE OR REPLACE FUNCTION public.detect_cache_outliers() RETURNS void
+	LANGUAGE sql
+AS $$
+	UPDATE public.spans set anomaly = true where spans.operationname = 'Check Cache'
 
 $$
 ;
