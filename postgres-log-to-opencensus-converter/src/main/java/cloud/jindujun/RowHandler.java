@@ -6,9 +6,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.time.temporal.TemporalUnit;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -375,7 +373,7 @@ public class RowHandler {
 				TimestampTuple timestampTuple = relationTsTupleMap.remove(searchresult.get().getKey());
 				if (timestampTuple.getStartTs() != null && timestampTuple.getEndTs() != null) {
 					ZonedDateTime startTs = timestampTuple.getStartTs().minus(LOCK_OFFSET_MILLISEC, ChronoUnit.MILLIS);
-					JaegerSpan span = startSpan(spanContext, startTs, "wait for " + lockType);
+					JaegerSpan span = startSpan(spanContext, startTs, "wait for Table Lock " + lockType);
 					span.setTag("sql", message);
 
 					ZonedDateTime endTs = timestampTuple.getEndTs();
