@@ -112,7 +112,7 @@ $$
 CREATE OR REPLACE FUNCTION public.detect_lock_outliers() RETURNS void
 	LANGUAGE sql
 AS $$
-	UPDATE public.spans set anomaly = true where spans.operationname = 'wait for Table Lock';
+	UPDATE public.spans set anomaly = true where spans.operationname like 'wait for Table Lock%';
 
 $$
 ;
@@ -120,8 +120,8 @@ $$
 CREATE OR REPLACE FUNCTION public.detect_cache_outliers() RETURNS void
 	LANGUAGE sql
 AS $$
-	UPDATE public.spans set anomaly = true where spans.operationname = 'Check Cache'
-
+	UPDATE public.spans set anomaly = true where spans.operationname = 'Cache Miss'
+--logs->0->'fields'->0->>'key' = 'cache_miss'
 $$
 ;
 
