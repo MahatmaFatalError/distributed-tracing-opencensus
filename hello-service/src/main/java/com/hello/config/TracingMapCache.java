@@ -9,7 +9,6 @@ import org.springframework.lang.Nullable;
 import com.hello.utils.SpanUtils;
 
 import io.opencensus.common.Scope;
-import io.opencensus.implcore.trace.RecordEventsSpanImpl;
 import io.opencensus.trace.Annotation;
 import io.opencensus.trace.AttributeValue;
 import io.opencensus.trace.Span;
@@ -33,7 +32,7 @@ public class TracingMapCache extends ConcurrentMapCache {
 		Span span = SpanUtils.buildSpan(tracer, "Check Cache").startSpan();
 		ValueWrapper response = null;
 		try (Scope ws = tracer.withSpan(span)) {
-			return super.get(key);
+			response = super.get(key);
 		} finally {
 			HashMap<String, AttributeValue> map = new HashMap<String, AttributeValue>();
 			if (response == null) {
@@ -46,5 +45,6 @@ public class TracingMapCache extends ConcurrentMapCache {
 			span.addAnnotation(Annotation.fromDescriptionAndAttributes("Cache Behaviour", map));
 			span.end();
 		}
+		return response;
 	}
 }
