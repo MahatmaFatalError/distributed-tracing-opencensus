@@ -28,7 +28,7 @@ import org.loadtest4j.drivers.gatling.GatlingBuilder;
 @Execution(ExecutionMode.CONCURRENT)
 public class CacheMissLT {
 
-	private static final LoadTester loadTester = GatlingBuilder.withUrl("http://localhost:8888").withDuration(Duration.ofSeconds(30)).withUsersPerSecond(5).build();
+	private static final LoadTester loadTester = GatlingBuilder.withUrl("http://localhost:8080/greetings").withDuration(Duration.ofSeconds(50)).withUsersPerSecond(5).build();
 
 	@Test
 	@Execution(ExecutionMode.CONCURRENT)
@@ -45,8 +45,8 @@ public class CacheMissLT {
 	@Execution(ExecutionMode.CONCURRENT)
 	public void clearVetsCache() throws InterruptedException, ClientProtocolException, IOException {
 
-		int iterations = 5;
-		int pauseMillis = 9000;
+		int iterations = 10;
+		int pauseMillis = 5000;
 
 		for (int i = 0; i < iterations; i++) {
     		long pause =  Math.round(pauseMillis * Math.random());

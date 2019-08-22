@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Random;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.client.ClientProtocolException;
@@ -27,10 +26,10 @@ import org.loadtest4j.drivers.gatling.GatlingBuilder;
  *
  */
 @Execution(ExecutionMode.CONCURRENT)
-public class RandomPetWithLockLT {
+public class LockLT {
 
-	private static final LoadTester loadTester = GatlingBuilder.withUrl("http://localhost:8888")
-            .withDuration(Duration.ofSeconds(60))
+	private static final LoadTester loadTester = GatlingBuilder.withUrl("http://localhost:8080/greetings")
+            .withDuration(Duration.ofSeconds(50))
             .withUsersPerSecond(5)
             .build();
 
@@ -38,7 +37,7 @@ public class RandomPetWithLockLT {
     @Test
     @Execution(ExecutionMode.CONCURRENT)
     public void shouldFindPets() {
-        List<Request> requests = Arrays.asList(Request.get("/hello"+ new Random().nextInt(13))
+        List<Request> requests = Arrays.asList(Request.get("/hello")
                                                 .withHeader("Accept", "application/json"));
 
         Result result = loadTester.run(requests);
@@ -53,7 +52,7 @@ public class RandomPetWithLockLT {
     public void lockPets() throws InterruptedException, ClientProtocolException, IOException {
 
     	int iterations = 10;
-    	int pauseMillis = 9000;
+    	int pauseMillis = 6000;
     	int lockDuration = 500;
 
     	for (int i = 0; i < iterations; i++) {

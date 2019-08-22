@@ -40,7 +40,7 @@ OPTIONS ( filename '/var/lib/postgresql/data/pg_log/pglog.csv', format 'csv' );
 create view pglog_last_min as (SELECT * from pglog WHERE log_time > current_timestamp - interval '1 minutes');
 
 
-CREATE OR REPLACE TABLE public.spans (
+CREATE TABLE IF NOT EXISTS public.spans (
 	id varchar NULL,
 	"index" varchar NULL,
 	score int NULL,
@@ -57,8 +57,8 @@ CREATE OR REPLACE TABLE public.spans (
 	starttimemillis varchar NULL,
 	tags jsonb NULL,
 	traceid varchar NOT NULL,
-	scenario varchar NULL SET DEFAULT false,
-	anomaly bool NULL,
+	scenario varchar NULL,
+	anomaly bool NULL DEFAULT false,
 	CONSTRAINT spans_pk PRIMARY KEY (id),
 	CONSTRAINT spans_un UNIQUE (spanid)
 );
