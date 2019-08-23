@@ -40,13 +40,13 @@ OPTIONS ( filename '/var/lib/postgresql/data/pg_log/pglog.csv', format 'csv' );
 create view pglog_last_min as (SELECT * from pglog WHERE log_time > current_timestamp - interval '1 minutes');
 
 
-CREATE TABLE IF NOT EXISTS public.spans (
-	id varchar NULL,
+CREATE TABLE public.spans (
+	id varchar NOT NULL,
 	"index" varchar NULL,
-	score int NULL,
+	score int4 NULL,
 	"type" varchar NOT NULL,
-	duration bigint NOT NULL,
-	flags integer NULL,
+	duration int8 NOT NULL,
+	flags int4 NULL,
 	logs jsonb NULL,
 	operationname varchar NULL,
 	processservicename varchar NULL,
@@ -59,6 +59,9 @@ CREATE TABLE IF NOT EXISTS public.spans (
 	traceid varchar NOT NULL,
 	scenario varchar NULL,
 	anomaly bool NULL DEFAULT false,
+	parent_span varchar NULL,
+	root_cause bool NULL,
+	CONSTRAINT spans_check CHECK (((parent_span)::text = (spanid)::text)),
 	CONSTRAINT spans_pk PRIMARY KEY (id),
 	CONSTRAINT spans_un UNIQUE (spanid)
 );
@@ -126,3 +129,32 @@ $$
 ;
 
 
+update spans set parent_span = "references"->0->>'spanID'
+where "references"->0->>'refType' = 'CHILD_OF' and traceid = "references"->0->>'traceID';
+
+
+
+
+CREATE OR REPLACE FUNCTION public.isRootCause(IN spanId TEXT) RETURNS BOOLEAN AS
+$$
+WITH RECURSIVE rec (traceid, spanid, parent_span, anomaly) as
+(
+  SELECT traceid, spanid, spans.parent_span, anomaly from spans where spanid = $1
+  UNION ALL
+  SELECT spans.traceid, spans.spanid, spans.parent_span, spans.anomaly from rec, spans where spans.parent_span = rec.spanid -- and spans.anomaly = true
+)
+SELECT not EXISTS( SELECT * FROM rec where anomaly = true offset 1)
+$$ LANGUAGE sql;
+
+
+
+CREATE OR REPLACE FUNCTION updateRCA() RETURNS void AS $$
+DECLARE
+    temprow record;
+BEGIN
+    FOR temprow IN select distinct spanid from spans where anomaly = true
+    loop
+    	update spans set root_cause = isRootCause(temprow.spanid) where spanid = temprow.spanid;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
