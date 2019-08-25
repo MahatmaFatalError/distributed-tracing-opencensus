@@ -158,3 +158,7 @@ BEGIN
     END LOOP;
 END;
 $$ LANGUAGE plpgsql;
+
+
+select detect_cache_outliers(), detect_lock_outliers(), detect_outliers('cache_miss') , detect_outliers('conn-pool') , detect_outliers('lock');
+select updateRCA();
