@@ -162,3 +162,14 @@ $$ LANGUAGE plpgsql;
 
 select detect_cache_outliers(), detect_lock_outliers(), detect_outliers('cache_miss') , detect_outliers('conn-pool') , detect_outliers('lock');
 select updateRCA();
+
+
+create view span_anomaly_rc_aggregation as (
+select scenario, anomaly, root_cause, count(*) from spans group by ( scenario, anomaly, root_cause ) order by scenario, anomaly, root_cause);
+
+create view scenario_anomaly_rc_aggregation as (
+select scenario, avg(anomaly_counter) avg_anomaly_counter, avg(root_cause_counter) avg_root_cause_counter, min(anomaly_counter) min_anomaly_counter, min(root_cause_counter) min_root_cause_counter, max(anomaly_counter) max_anomaly_counter, max(root_cause_counter) max_root_cause_counter
+from (select traceid, scenario, count(anomaly) filter ( WHERE anomaly = true) anomaly_counter, count(root_cause) FILTER (WHERE root_cause = true) root_cause_counter from spans group by scenario,traceid order by traceid) sub
+where sub.anomaly_counter > 0
+group by sub.scenario
+);

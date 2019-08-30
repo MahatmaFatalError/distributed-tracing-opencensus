@@ -90,3 +90,25 @@ dbquery_tbl_corr2 <- as_data_frame(dbquery_corr2)
 fit.pea2 <- cor(dbquery_tbl_corr2, use="complete.obs",method="pearson")
 corrplot(fit.pea2, method = "circle") 
 
+
+
+dbquery_corr3 = dbGetQuery(con, "select traceid, scenario, count(anomaly) filter ( WHERE anomaly = true) anomaly_counter, count(root_cause) FILTER (WHERE root_cause = true) root_cause_counter from spans group by scenario,traceid having count(anomaly) filter ( WHERE anomaly = true) > 0 order by traceid;")
+
+dbquery_tbl_corr3 <- as_data_frame(dbquery_corr3)
+summary(dbquery_tbl_corr3)
+str(dbquery_tbl_corr3)
+
+
+library(reshape2)
+dbquery_tbl_corr3.m <- melt(dbquery_tbl_corr3,id.vars='scenario', measure.vars=c('anomaly_counter','root_cause_counter'))
+ggplot(dbquery_tbl_corr3.m) +
+  geom_boxplot(aes(x=scenario, y=value, color=variable))+
+  ylab("Amount per Trace")
+
+
++facet_grid(. ~ scenario)
+
+
+
+
+
