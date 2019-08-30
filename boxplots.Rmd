@@ -1,0 +1,103 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+library(RPostgreSQL)
+library(ggplot2)
+library(tibble)
+require(scales)
+
+## connect to db
+pg = dbDriver("PostgreSQL")
+con = dbConnect(pg, user="postgres", password="postgres", host="localhost", port=5432, dbname="postgres")
+
+```
+
+```{r}
+
+dbquery = dbGetQuery(con, "select traceid, spanid, parent_span, operationname, duration, starttimemillis, anomaly, root_cause, scenario from spans where scenario = 'lock'")
+
+summary(dbquery)
+str(dbquery)
+
+
+dbquery_tbl <- as_data_frame(dbquery)
+dbquery_tbl$operationname <- as.factor(dbquery_tbl$operationname)
+
+p  <- ggplot(dbquery_tbl, aes(operationname, duration/1000)) +
+  geom_boxplot(        # custom outliers
+    outlier.colour="red",
+    outlier.fill="red",
+    outlier.size=2) +
+  coord_flip() +
+  ylab("duration in ms") 
+
+# displays as you require
+p + scale_y_continuous(labels = comma)
+```
+
+```{r}
+dbquery = dbGetQuery(con, "select traceid, spanid, parent_span, operationname, duration, starttimemillis, anomaly, root_cause, scenario from spans where scenario = 'cache_miss'")
+
+summary(dbquery)
+str(dbquery)
+
+
+dbquery_tbl <- as_data_frame(dbquery)
+dbquery_tbl$operationname <- as.factor(dbquery_tbl$operationname)
+
+p  <- ggplot(dbquery_tbl, aes(operationname, duration/1000)) +
+  geom_boxplot(        # custom outliers
+    outlier.colour="red",
+    outlier.fill="red",
+    outlier.size=2) +
+  coord_flip() +
+  ylab("duration in ms") 
+
+# displays as you require
+p + scale_y_continuous(labels = comma)
+```
+
+```{r}
+dbquery = dbGetQuery(con, "select traceid, spanid, parent_span, operationname, duration, starttimemillis, anomaly, root_cause, scenario from spans where scenario = 'conn-pool'")
+
+summary(dbquery)
+str(dbquery)
+
+
+dbquery_tbl <- as_data_frame(dbquery)
+dbquery_tbl$operationname <- as.factor(dbquery_tbl$operationname)
+
+p  <- ggplot(dbquery_tbl, aes(operationname, duration/1000)) +
+  geom_boxplot(        # custom outliers
+    outlier.colour="red",
+    outlier.fill="red",
+    outlier.size=2) +
+  coord_flip() +
+  ylab("duration in ms") 
+
+# displays as you require
+p + scale_y_continuous(labels = comma)
+```
+```{r}
+# Correlation by pearson
+fit.pea <- cor(dbquery_tbl, use="complete.obs",method="pearson")
+fit.pea
+
+library(corrplot)
+M <- cor(dbquery_tbl)
+corrplot(M, method = "circle") # in corrplot package, named "circle", "square", "ellipse", "number", "shade", "color", "pie".
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
