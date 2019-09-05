@@ -106,9 +106,15 @@ ggplot(dbquery_tbl_corr3.m) +
   ylab("Amount per Trace")
 
 
-+facet_grid(. ~ scenario)
+#+facet_grid(. ~ scenario)
 
 
+dbquery_tbl_stats = as_data_frame(dbGetQuery(con, "select scenario, operationname, count(*) span_count, 
+count(anomaly) filter ( WHERE anomaly = true) anomaly_counter, 
+                                             count(root_cause) FILTER (WHERE root_cause = true) root_cause_counter 
+                                             from public.spans 
+                                             group by scenario,operationname
+                                             having count(anomaly) filter ( WHERE anomaly = true) > 0
+                                             order by scenario,operationname;"))
 
-
-
+summary(dbquery_tbl_stats)
