@@ -1,9 +1,15 @@
 require(ggplot2)
 
-gatling <- read.csv(sep=";", file = '/Users/d072521/Library/Mobile Documents/com~apple~CloudDocs/SRH Master/Thesis/Latex/src/Performance-comparison/Vergleich/loadtest4jsimulation-1567881312535 - LockLT ohne autoexplain/simulation_converted_clean.csv')
+gatling <- read.csv(sep=";", file = '/Users/d072521/Library/Mobile Documents/com~apple~CloudDocs/SRH Master/Thesis/Latex/src/Performance-comparison/loadtest4jsimulation-1566503081945-lock2-60connpool/gatling-result.csv')
 head(gatling)
 str(gatling)
 summary(gatling)
+
+
+gatling1 <- read.csv(sep=";", file = '/Users/d072521/Library/Mobile Documents/com~apple~CloudDocs/SRH Master/Thesis/Latex/src/Performance-comparison/Vergleich/loadtest4jsimulation-1567881312535 - LockLT ohne autoexplain/simulation_converted_clean.csv')
+head(gatling1)
+str(gatling1)
+summary(gatling1)
 
 
 gatling2 <- read.csv(sep=";", file = '/Users/d072521/Library/Mobile Documents/com~apple~CloudDocs/SRH Master/Thesis/Latex/src/Performance-comparison/Vergleich/loadtest4jsimulation-1567882203539 - LockLT ohne loging at all/simulation_converted.csv')
@@ -14,11 +20,17 @@ summary(gatling2)
 
 #install.packages("dgof")
 #require(dgof)
-ks.test(gatling$duration, gatling2$duration)
+ks.test(gatling$duration, gatling1$duration) 
+ks.test(gatling$duration, gatling1$duration, alternative = "greater")
+ks.test(gatling$duration, gatling1$duration, alternative = "less") 
+
+ks.test(gatling$duration, gatling2$duration) 
+ks.test(gatling$duration, gatling2$duration, alternative = "greater")
+ks.test(gatling$duration, gatling2$duration, alternative = "less") 
 
 
 #https://davetang.org/muse/2012/04/17/comparing-different-distributions/
-# The null hypothesis is that both samples come from the same distribution and is not rejected (p-value = 0.01166 (98% signifikanzniveau)) since they do come from the exact same distribution.
+# The null hypothesis is that both samples come from the same distribution and is rejected (p-value = 0.01166 (98% signifikanzniveau)).
 # You reject the null hypothesis that the two samples were drawn from the same distribution if the p-value is less than your significance level.
 
 
